@@ -1,0 +1,288 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body, html {
+    width: 100%;
+    height: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', sans-serif;
+    background-color: #000000; /* AMOLED black */
+    color: #ffffff;
+    overflow-x: hidden;
+}
+
+.app {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Header */
+header {
+    background-color: #0a0a0a;
+    padding: 1.5rem;
+    border-bottom: 1px solid #1a1a1a;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+h1 {
+    font-size: 1.5rem;
+    margin-bottom: 1rem;
+    color: #ffffff;
+    font-weight: 600;
+}
+
+/* Search Bar */
+.search-bar {
+    width: 100%;
+    max-width: 600px;
+    padding: 0.75rem 1rem;
+    font-size: 1rem;
+    background-color: #1a1a1a;
+    border: 1px solid #2a2a2a;
+    border-radius: 8px;
+    color: #ffffff;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.search-bar::placeholder {
+    color: #666666;
+}
+
+.search-bar:focus {
+    border-color: #3a3a3a;
+}
+
+/* Main Content */
+main {
+    flex: 1;
+    padding: 1.5rem;
+    max-width: 1200px;
+    width: 100%;
+    margin: 0 auto;
+}
+
+/* Loading & Error States */
+.loading, .error, .no-results {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: #888888;
+    font-size: 1.1rem;
+}
+
+.error {
+    color: #ff4444;
+}
+
+/* Sections */
+.series-section, .movies-section {
+    margin-bottom: 2rem;
+}
+
+h2 {
+    font-size: 1.3rem;
+    margin-bottom: 1rem;
+    color: #dddddd;
+    font-weight: 500;
+}
+
+/* Series */
+.series {
+    margin-bottom: 1rem;
+    background-color: #0a0a0a;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid #1a1a1a;
+}
+
+.series-header {
+    padding: 1rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    transition: background-color 0.2s;
+    user-select: none;
+}
+
+.series-header:hover {
+    background-color: #151515;
+}
+
+.series-header:active {
+    background-color: #0f0f0f;
+}
+
+.expand-icon {
+    font-size: 0.8rem;
+    color: #888888;
+    min-width: 1rem;
+}
+
+.series-name {
+    flex: 1;
+    font-size: 1.1rem;
+    font-weight: 500;
+}
+
+.series-count {
+    font-size: 0.9rem;
+    color: #666666;
+}
+
+/* Seasons */
+.seasons {
+    background-color: #050505;
+}
+
+.season {
+    border-top: 1px solid #1a1a1a;
+}
+
+.season-header {
+    padding: 0.9rem 1rem 0.9rem 2rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    transition: background-color 0.2s;
+    user-select: none;
+}
+
+.season-header:hover {
+    background-color: #0f0f0f;
+}
+
+.season-header:active {
+    background-color: #0a0a0a;
+}
+
+.season-name {
+    flex: 1;
+    font-size: 1rem;
+}
+
+.episode-count {
+    font-size: 0.85rem;
+    color: #555555;
+}
+
+/* Episodes */
+.episodes {
+    background-color: #000000;
+    padding: 0.5rem 0;
+}
+
+.episode {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.7rem 1rem 0.7rem 3rem;
+    color: #cccccc;
+    text-decoration: none;
+    transition: background-color 0.2s;
+    border-left: 3px solid transparent;
+}
+
+.episode:hover {
+    background-color: #0f0f0f;
+    border-left-color: #3a3a3a;
+}
+
+.episode:active {
+    background-color: #1a1a1a;
+}
+
+.episode-number {
+    font-size: 0.85rem;
+    color: #888888;
+    font-weight: 600;
+    min-width: 2.5rem;
+}
+
+.episode-name {
+    flex: 1;
+    font-size: 0.95rem;
+}
+
+/* Movies */
+.movie-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.movie {
+    display: block;
+    background-color: #0a0a0a;
+    border: 1px solid #1a1a1a;
+    border-radius: 8px;
+    padding: 1.5rem 1rem;
+    text-decoration: none;
+    color: #ffffff;
+    transition: all 0.2s;
+    text-align: center;
+}
+
+.movie:hover {
+    background-color: #151515;
+    border-color: #2a2a2a;
+    transform: translateY(-2px);
+}
+
+.movie:active {
+    transform: translateY(0);
+}
+
+.movie-name {
+    font-size: 1rem;
+    line-height: 1.4;
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 768px) {
+    header {
+        padding: 1rem;
+    }
+
+    h1 {
+        font-size: 1.3rem;
+    }
+
+    main {
+        padding: 1rem;
+    }
+
+    .search-bar {
+        font-size: 0.95rem;
+    }
+
+    .series-header, .season-header {
+        padding: 0.8rem;
+    }
+
+    .episode {
+        padding: 0.7rem 1rem 0.7rem 2rem;
+    }
+
+    .movie-list {
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 0.75rem;
+    }
+}
+
+@media (max-width: 480px) {
+    h1 {
+        font-size: 1.2rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .movie-list {
+        grid-template-columns: 1fr 1fr;
+    }
+}
