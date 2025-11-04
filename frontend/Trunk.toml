@@ -1,8 +1,6 @@
-[[build]]
+[build]
 target = "index.html"
 dist = "dist"
-
-[build]
 # Release mode for optimized WASM
 release = true
 

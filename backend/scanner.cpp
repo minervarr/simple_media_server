@@ -20,7 +20,9 @@ bool VideoScanner::isVideoFile(const std::string& filename) {
     std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
 
     for (const auto& ext : videoExtensions_) {
-        if (lower.ends_with(ext)) {
+        // C++17 compatible ends_with implementation
+        if (lower.size() >= ext.size() &&
+            lower.compare(lower.size() - ext.size(), ext.size(), ext) == 0) {
             return true;
         }
     }
