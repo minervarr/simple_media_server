@@ -209,7 +209,7 @@ int main(int argc, char** argv) {
     });
 
     // Serve frontend WASM files
-    server.set_mount_point("/", "../frontend/dist");
+    server.set_mount_point("/", "../../frontend/dist");
 
     // Start server
     std::cout << "Server starting on http://" << config.host << ":" << config.port << std::endl;
