@@ -1,6 +1,7 @@
 #!/bin/bash
 
 # Build script for Rust WASM frontend
+set -e  # Exit on error
 
 echo "Building frontend..."
 
