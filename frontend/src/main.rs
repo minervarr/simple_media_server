@@ -51,6 +51,7 @@ struct App {
     library: Option<Library>,
     profiles: Vec<Profile>,
     current_profile: Option<Profile>,
+    show_profile_selector: bool,
     search_query: String,
     expanded_series: Vec<String>,
     expanded_seasons: Vec<String>,
@@ -78,6 +79,7 @@ enum Msg {
     CloseVideo,
     ToggleWatched(String), // video path
     SelectProfile(Profile),
+    ShowProfileSelector,
 }
 
 impl Component for App {
@@ -115,6 +117,7 @@ impl Component for App {
             library: None,
             profiles: Vec::new(),
             current_profile: None,
+            show_profile_selector: true, // Will be set to false if we have a saved profile
             search_query: String::new(),
             expanded_series: Vec::new(),
             expanded_seasons: Vec::new(),
@@ -141,19 +144,17 @@ impl Component for App {
                 if let Ok(last_profile_id) = LocalStorage::get::<String>("current_profile_id") {
                     if let Some(profile) = self.profiles.iter().find(|p| p.id == last_profile_id) {
                         self.current_profile = Some(profile.clone());
+                        self.show_profile_selector = false; // Hide selector if we have a saved profile
+
+                        // Load watched videos for current profile
+                        let storage_key = format!("watched_videos_{}", profile.id);
+                        self.watched_videos = LocalStorage::get(&storage_key).unwrap_or_default();
                     }
                 }
 
-                // If no profile selected, select the first one
-                if self.current_profile.is_none() && !self.profiles.is_empty() {
-                    self.current_profile = Some(self.profiles[0].clone());
-                    let _ = LocalStorage::set("current_profile_id", &self.profiles[0].id);
-                }
-
-                // Load watched videos for current profile
-                if let Some(profile) = &self.current_profile {
-                    let storage_key = format!("watched_videos_{}", profile.id);
-                    self.watched_videos = LocalStorage::get(&storage_key).unwrap_or_default();
+                // If no profile selected, show profile selector
+                if self.current_profile.is_none() {
+                    self.show_profile_selector = true;
                 }
 
                 true
@@ -231,6 +232,13 @@ impl Component for App {
                 let storage_key = format!("watched_videos_{}", profile.id);
                 self.watched_videos = LocalStorage::get(&storage_key).unwrap_or_default();
 
+                // Hide profile selector after selection
+                self.show_profile_selector = false;
+
+                true
+            }
+            Msg::ShowProfileSelector => {
+                self.show_profile_selector = true;
                 true
             }
         }
@@ -243,27 +251,35 @@ impl Component for App {
                     {include_str!("../style.css")}
                 </style>
 
-                <header>
-                    <div class="header-top">
-                        <h1>{"Media Server"}</h1>
-                        {self.render_profile_selector(ctx)}
-                    </div>
-                    <input
-                        type="text"
-                        class="search-bar"
-                        placeholder="Search videos..."
-                        oninput={ctx.link().callback(|e: InputEvent| {
-                            let input: HtmlInputElement = e.target_unchecked_into();
-                            Msg::UpdateSearch(input.value())
-                        })}
-                    />
-                </header>
+                {if self.show_profile_selector {
+                    self.render_profile_selection_screen(ctx)
+                } else {
+                    html! {
+                        <>
+                            <header>
+                                <div class="header-top">
+                                    <h1>{"Media Server"}</h1>
+                                    {self.render_profile_switcher_button(ctx)}
+                                </div>
+                                <input
+                                    type="text"
+                                    class="search-bar"
+                                    placeholder="Search videos..."
+                                    oninput={ctx.link().callback(|e: InputEvent| {
+                                        let input: HtmlInputElement = e.target_unchecked_into();
+                                        Msg::UpdateSearch(input.value())
+                                    })}
+                                />
+                            </header>
 
-                <main>
-                    {self.render_content(ctx)}
-                </main>
+                            <main>
+                                {self.render_content(ctx)}
+                            </main>
 
-                {self.render_video_player(ctx)}
+                            {self.render_video_player(ctx)}
+                        </>
+                    }
+                }}
             </div>
         }
     }
@@ -505,33 +521,65 @@ impl App {
         }
     }
 
-    fn render_profile_selector(&self, ctx: &Context<Self>) -> Html {
+    fn render_profile_selection_screen(&self, ctx: &Context<Self>) -> Html {
+        if self.profiles_loading {
+            return html! {
+                <div class="profile-selection-screen">
+                    <div class="loading">{"Loading profiles..."}</div>
+                </div>
+            };
+        }
+
         if self.profiles.is_empty() {
-            return html! {};
+            return html! {
+                <div class="profile-selection-screen">
+                    <div class="error">{"No profiles configured"}</div>
+                </div>
+            };
         }
 
         html! {
-            <div class="profile-selector">
-                {for self.profiles.iter().map(|profile| {
-                    let is_active = self.current_profile.as_ref()
-                        .map(|p| p.id == profile.id)
-                        .unwrap_or(false);
-                    let profile_clone = profile.clone();
+            <div class="profile-selection-screen">
+                <div class="profile-selection-content">
+                    <h1 class="profile-selection-title">{"Who's watching?"}</h1>
+                    <div class="profile-grid">
+                        {for self.profiles.iter().map(|profile| {
+                            let profile_clone = profile.clone();
 
-                    html! {
-                        <div
-                            class={classes!("profile-item", is_active.then_some("active"))}
-                            onclick={ctx.link().callback(move |_| {
-                                Msg::SelectProfile(profile_clone.clone())
-                            })}
-                            title={profile.name.clone()}
-                        >
-                            <span class="profile-icon">{&profile.icon}</span>
-                            <span class="profile-name">{&profile.name}</span>
-                        </div>
-                    }
-                })}
+                            html! {
+                                <div
+                                    class="profile-card"
+                                    onclick={ctx.link().callback(move |_| {
+                                        Msg::SelectProfile(profile_clone.clone())
+                                    })}
+                                >
+                                    <div class="profile-avatar">
+                                        <span class="profile-avatar-icon">{&profile.icon}</span>
+                                    </div>
+                                    <div class="profile-card-name">{&profile.name}</div>
+                                </div>
+                            }
+                        })}
+                    </div>
+                </div>
             </div>
+        }
+    }
+
+    fn render_profile_switcher_button(&self, ctx: &Context<Self>) -> Html {
+        if let Some(profile) = &self.current_profile {
+            html! {
+                <div
+                    class="profile-switcher"
+                    onclick={ctx.link().callback(|_| Msg::ShowProfileSelector)}
+                    title="Switch profile"
+                >
+                    <span class="profile-switcher-icon">{&profile.icon}</span>
+                    <span class="profile-switcher-name">{&profile.name}</span>
+                </div>
+            }
+        } else {
+            html! {}
         }
     }
 }
