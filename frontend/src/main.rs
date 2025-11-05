@@ -4,6 +4,8 @@ use gloo_net::http::Request;
 use web_sys::HtmlInputElement;
 use gloo_storage::{LocalStorage, Storage};
 use std::collections::HashSet;
+use wasm_bindgen::JsCast;
+use web_sys::{window, Navigator};
 
 // Data structures matching backend JSON
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
@@ -58,14 +60,8 @@ struct App {
     loading: bool,
     profiles_loading: bool,
     error: Option<String>,
-    playing_video: Option<VideoInfo>,
     watched_videos: HashSet<String>,
-}
-
-#[derive(Clone, PartialEq)]
-struct VideoInfo {
-    url: String,
-    title: String,
+    copied_video: Option<String>, // Track which video was just copied
 }
 
 enum Msg {
@@ -75,11 +71,12 @@ enum Msg {
     UpdateSearch(String),
     ToggleSeries(String),
     ToggleSeason(String, u32),
-    PlayVideo(String, String), // (url, title)
-    CloseVideo,
+    CopyVideoLink(String, String), // (url, path)
+    ShareVideo(String, String), // (url, title)
     ToggleWatched(String), // video path
     SelectProfile(Profile),
     ShowProfileSelector,
+    ClearCopiedState,
 }
 
 impl Component for App {
@@ -124,8 +121,8 @@ impl Component for App {
             loading: true,
             profiles_loading: true,
             error: None,
-            playing_video: None,
             watched_videos: HashSet::new(),
+            copied_video: None,
         }
     }
 
@@ -186,22 +183,52 @@ impl Component for App {
                 }
                 true
             }
-            Msg::PlayVideo(url, title) => {
-                // Extract the video path from the URL (remove "/video/" prefix)
-                let path = url.strip_prefix("/video/").unwrap_or(&url).to_string();
+            Msg::CopyVideoLink(url, path) => {
+                // Try to copy to clipboard
+                if let Some(window) = window() {
+                    if let Some(navigator) = window.navigator() {
+                        if let Ok(clipboard) = navigator.clipboard() {
+                            let full_url = format!("{}{}", window.location().origin().unwrap_or_default(), url);
+                            let _ = clipboard.write_text(&full_url);
+                            self.copied_video = Some(path.clone());
 
-                // Mark as watched when playing (use profile-specific storage)
-                self.watched_videos.insert(path);
-                if let Some(profile) = &self.current_profile {
-                    let storage_key = format!("watched_videos_{}", profile.id);
-                    let _ = LocalStorage::set(&storage_key, &self.watched_videos);
+                            // Clear the copied state after 2 seconds
+                            let link = _ctx.link().clone();
+                            wasm_bindgen_futures::spawn_local(async move {
+                                gloo_timers::future::TimeoutFuture::new(2000).await;
+                                link.send_message(Msg::ClearCopiedState);
+                            });
+                        }
+                    }
                 }
-
-                self.playing_video = Some(VideoInfo { url, title });
                 true
             }
-            Msg::CloseVideo => {
-                self.playing_video = None;
+            Msg::ShareVideo(url, title) => {
+                // Try to use Web Share API (mobile devices)
+                if let Some(window) = window() {
+                    if let Some(navigator) = window.navigator() {
+                        let full_url = format!("{}{}", window.location().origin().unwrap_or_default(), url);
+
+                        // Use share API if available
+                        let share_data = js_sys::Object::new();
+                        js_sys::Reflect::set(&share_data, &"title".into(), &title.into()).ok();
+                        js_sys::Reflect::set(&share_data, &"url".into(), &full_url.into()).ok();
+
+                        if let Ok(share) = js_sys::Reflect::get(&navigator, &"share".into()) {
+                            if !share.is_undefined() {
+                                let _ = js_sys::Reflect::apply(
+                                    &share.unchecked_into(),
+                                    &navigator.into(),
+                                    &js_sys::Array::of1(&share_data)
+                                );
+                            }
+                        }
+                    }
+                }
+                true
+            }
+            Msg::ClearCopiedState => {
+                self.copied_video = None;
                 true
             }
             Msg::ToggleWatched(path) => {
@@ -275,8 +302,6 @@ impl Component for App {
                             <main>
                                 {self.render_content(ctx)}
                             </main>
-
-                            {self.render_video_player(ctx)}
                         </>
                     }
                 }}
@@ -427,19 +452,19 @@ impl App {
     fn render_episode(&self, ctx: &Context<Self>, episode: &Video) -> Html {
         let video_url = format!("/video/{}", episode.path);
         let title = episode.filename.clone();
-        let url_clone = video_url.clone();
         let path = episode.path.clone();
-        let path_for_toggle = path.clone();
         let is_watched = self.watched_videos.contains(&path);
+        let is_copied = self.copied_video.as_ref() == Some(&path);
+
+        let url_for_copy = video_url.clone();
+        let path_for_copy = path.clone();
+        let url_for_share = video_url.clone();
+        let title_for_share = title.clone();
+        let path_for_toggle = path.clone();
 
         html! {
             <div class={classes!("episode", is_watched.then_some("watched"))}>
-                <div
-                    class="episode-content"
-                    onclick={ctx.link().callback(move |_| {
-                        Msg::PlayVideo(url_clone.clone(), title.clone())
-                    })}
-                >
+                <div class="episode-info">
                     {if let Some(ep_num) = episode.episode {
                         html! { <span class="episode-number">{format!("E{:02}", ep_num)}</span> }
                     } else {
@@ -447,15 +472,37 @@ impl App {
                     }}
                     <span class="episode-name">{&episode.filename}</span>
                 </div>
-                <div
-                    class="watched-indicator"
-                    onclick={ctx.link().callback(move |e: MouseEvent| {
-                        e.stop_propagation();
-                        Msg::ToggleWatched(path_for_toggle.clone())
-                    })}
-                    title={if is_watched { "Mark as unwatched" } else { "Mark as watched" }}
-                >
-                    {if is_watched { "✓" } else { "○" }}
+                <div class="episode-actions">
+                    <button
+                        class={classes!("action-button", "copy-button", is_copied.then_some("copied"))}
+                        onclick={ctx.link().callback(move |e: MouseEvent| {
+                            e.stop_propagation();
+                            Msg::CopyVideoLink(url_for_copy.clone(), path_for_copy.clone())
+                        })}
+                        title={if is_copied { "Link copied!" } else { "Copy link" }}
+                    >
+                        {if is_copied { "✓" } else { "🔗" }}
+                    </button>
+                    <button
+                        class="action-button share-button"
+                        onclick={ctx.link().callback(move |e: MouseEvent| {
+                            e.stop_propagation();
+                            Msg::ShareVideo(url_for_share.clone(), title_for_share.clone())
+                        })}
+                        title="Share"
+                    >
+                        {"📤"}
+                    </button>
+                    <div
+                        class="watched-indicator"
+                        onclick={ctx.link().callback(move |e: MouseEvent| {
+                            e.stop_propagation();
+                            Msg::ToggleWatched(path_for_toggle.clone())
+                        })}
+                        title={if is_watched { "Mark as unwatched" } else { "Mark as watched" }}
+                    >
+                        {if is_watched { "✓" } else { "○" }}
+                    </div>
                 </div>
             </div>
         }
@@ -464,60 +511,52 @@ impl App {
     fn render_movie(&self, ctx: &Context<Self>, movie: &Movie) -> Html {
         let video_url = format!("/video/{}", movie.path);
         let title = movie.name.clone();
-        let url_clone = video_url.clone();
         let path = movie.path.clone();
-        let path_for_toggle = path.clone();
         let is_watched = self.watched_videos.contains(&path);
+        let is_copied = self.copied_video.as_ref() == Some(&path);
+
+        let url_for_copy = video_url.clone();
+        let path_for_copy = path.clone();
+        let url_for_share = video_url.clone();
+        let title_for_share = title.clone();
+        let path_for_toggle = path.clone();
 
         html! {
             <div class={classes!("movie", is_watched.then_some("watched"))}>
-                <div
-                    class="movie-content"
-                    onclick={ctx.link().callback(move |_| {
-                        Msg::PlayVideo(url_clone.clone(), title.clone())
-                    })}
-                >
-                    <div class="movie-name">{&movie.name}</div>
-                </div>
-                <div
-                    class="watched-indicator"
-                    onclick={ctx.link().callback(move |e: MouseEvent| {
-                        e.stop_propagation();
-                        Msg::ToggleWatched(path_for_toggle.clone())
-                    })}
-                    title={if is_watched { "Mark as unwatched" } else { "Mark as watched" }}
-                >
-                    {if is_watched { "✓" } else { "○" }}
-                </div>
-            </div>
-        }
-    }
-
-    fn render_video_player(&self, ctx: &Context<Self>) -> Html {
-        if let Some(video) = &self.playing_video {
-            html! {
-                <div class="video-player-overlay">
-                    <div class="video-player-container">
-                        <div class="video-player-header">
-                            <h3>{&video.title}</h3>
-                            <button
-                                class="close-button"
-                                onclick={ctx.link().callback(|_| Msg::CloseVideo)}
-                            >
-                                {"✕"}
-                            </button>
-                        </div>
-                        <video
-                            controls=true
-                            autoplay=true
-                            preload="metadata"
-                            src={video.url.clone()}
-                        />
+                <div class="movie-name">{&movie.name}</div>
+                <div class="movie-actions">
+                    <button
+                        class={classes!("action-button", "copy-button", is_copied.then_some("copied"))}
+                        onclick={ctx.link().callback(move |e: MouseEvent| {
+                            e.stop_propagation();
+                            Msg::CopyVideoLink(url_for_copy.clone(), path_for_copy.clone())
+                        })}
+                        title={if is_copied { "Link copied!" } else { "Copy link" }}
+                    >
+                        {if is_copied { "✓" } else { "🔗" }}
+                    </button>
+                    <button
+                        class="action-button share-button"
+                        onclick={ctx.link().callback(move |e: MouseEvent| {
+                            e.stop_propagation();
+                            Msg::ShareVideo(url_for_share.clone(), title_for_share.clone())
+                        })}
+                        title="Share"
+                    >
+                        {"📤"}
+                    </button>
+                    <div
+                        class="watched-indicator movie-watched"
+                        onclick={ctx.link().callback(move |e: MouseEvent| {
+                            e.stop_propagation();
+                            Msg::ToggleWatched(path_for_toggle.clone())
+                        })}
+                        title={if is_watched { "Mark as unwatched" } else { "Mark as watched" }}
+                    >
+                        {if is_watched { "✓" } else { "○" }}
                     </div>
                 </div>
-            }
-        } else {
-            html! {}
+            </div>
         }
     }
 
