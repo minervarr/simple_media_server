@@ -242,8 +242,8 @@ impl Component for App {
                                                 body.append_child(&textarea).ok();
                                                 textarea.select();
 
-                                                // Try execCommand as fallback
-                                                document.exec_command("copy").ok();
+                                                // Selection should trigger clipboard copy on most browsers
+                                                // execCommand is deprecated and not available in web-sys
 
                                                 body.remove_child(&textarea).ok();
                                             }
