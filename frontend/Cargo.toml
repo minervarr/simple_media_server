@@ -16,7 +16,12 @@ web-sys = { version = "0.3", features = [
     "Clipboard",
     "Location",
     "Navigator",
-    "ShareData"
+    "ShareData",
+    "Element",
+    "HtmlElement",
+    "HtmlTextAreaElement",
+    "HtmlBodyElement",
+    "CssStyleDeclaration"
 ] }
 gloo-net = "0.5"
 gloo-utils = "0.2"

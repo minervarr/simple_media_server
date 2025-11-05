@@ -230,22 +230,26 @@ impl Component for App {
                                     if let Ok(textarea) = document.create_element("textarea") {
                                         use wasm_bindgen::JsCast;
                                         if let Ok(textarea) = textarea.dyn_into::<web_sys::HtmlTextAreaElement>() {
-                                                textarea.set_value(&full_url_clone);
-                                                textarea.style().set_property("position", "fixed").ok();
-                                                textarea.style().set_property("opacity", "0").ok();
+                                            textarea.set_value(&full_url_clone);
 
-                                                if let Some(body) = document.body() {
-                                                    body.append_child(&textarea).ok();
-                                                    textarea.select();
+                                            // Access style through HtmlElement
+                                            let element: &web_sys::HtmlElement = textarea.as_ref();
+                                            let style = element.style();
+                                            style.set_property("position", "fixed").ok();
+                                            style.set_property("opacity", "0").ok();
 
-                                                    // Try execCommand as fallback
-                                                    document.exec_command("copy").ok();
+                                            if let Some(body) = document.body() {
+                                                body.append_child(&textarea).ok();
+                                                textarea.select();
 
-                                                    body.remove_child(&textarea).ok();
-                                                }
+                                                // Try execCommand as fallback
+                                                document.exec_command("copy").ok();
+
+                                                body.remove_child(&textarea).ok();
                                             }
                                         }
                                     }
+                                }
                             }
                         }
                     });
@@ -268,7 +272,6 @@ impl Component for App {
                     let full_url = format!("{}{}", window.location().origin().unwrap_or_default(), url);
 
                     // Check if share API is available using JavaScript reflection
-                    use wasm_bindgen::JsCast;
                     if let Ok(share_fn) = js_sys::Reflect::get(&navigator, &"share".into()) {
                         if !share_fn.is_undefined() {
                             // Share API is available - create ShareData
