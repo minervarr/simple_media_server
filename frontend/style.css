@@ -29,11 +29,66 @@ header {
     z-index: 100;
 }
 
+.header-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    gap: 1rem;
+}
+
 h1 {
     font-size: 1.5rem;
-    margin-bottom: 1rem;
+    margin: 0;
     color: #ffffff;
     font-weight: 600;
+}
+
+/* Profile Selector */
+.profile-selector {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.profile-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.5rem 0.75rem;
+    background-color: #1a1a1a;
+    border: 2px solid #2a2a2a;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    user-select: none;
+    min-width: 70px;
+}
+
+.profile-item:hover {
+    background-color: #252525;
+    border-color: #3a3a3a;
+}
+
+.profile-item.active {
+    background-color: #2a2a2a;
+    border-color: #00aa00;
+}
+
+.profile-icon {
+    font-size: 1.5rem;
+    line-height: 1;
+}
+
+.profile-name {
+    font-size: 0.75rem;
+    color: #888888;
+    font-weight: 500;
+}
+
+.profile-item.active .profile-name {
+    color: #00aa00;
 }
 
 /* Search Bar */
@@ -319,8 +374,34 @@ h2 {
         padding: 1rem;
     }
 
+    .header-top {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.75rem;
+    }
+
     h1 {
         font-size: 1.3rem;
+    }
+
+    .profile-selector {
+        width: 100%;
+        justify-content: flex-start;
+        overflow-x: auto;
+        padding-bottom: 0.25rem;
+    }
+
+    .profile-item {
+        min-width: 60px;
+        padding: 0.4rem 0.6rem;
+    }
+
+    .profile-icon {
+        font-size: 1.3rem;
+    }
+
+    .profile-name {
+        font-size: 0.7rem;
     }
 
     main {

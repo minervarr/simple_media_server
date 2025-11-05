@@ -7,6 +7,13 @@ use std::collections::HashSet;
 
 // Data structures matching backend JSON
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
+struct Profile {
+    id: String,
+    name: String,
+    icon: String,
+}
+
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 struct Video {
     path: String,
     filename: String,
@@ -42,10 +49,13 @@ struct Library {
 // Component state
 struct App {
     library: Option<Library>,
+    profiles: Vec<Profile>,
+    current_profile: Option<Profile>,
     search_query: String,
     expanded_series: Vec<String>,
     expanded_seasons: Vec<String>,
     loading: bool,
+    profiles_loading: bool,
     error: Option<String>,
     playing_video: Option<VideoInfo>,
     watched_videos: HashSet<String>,
@@ -59,6 +69,7 @@ struct VideoInfo {
 
 enum Msg {
     LibraryLoaded(Library),
+    ProfilesLoaded(Vec<Profile>),
     LoadError(String),
     UpdateSearch(String),
     ToggleSeries(String),
@@ -66,6 +77,7 @@ enum Msg {
     PlayVideo(String, String), // (url, title)
     CloseVideo,
     ToggleWatched(String), // video path
+    SelectProfile(Profile),
 }
 
 impl Component for App {
@@ -73,6 +85,19 @@ impl Component for App {
     type Properties = ();
 
     fn create(ctx: &Context<Self>) -> Self {
+        // Fetch profiles on startup
+        ctx.link().send_future(async {
+            match Request::get("/api/profiles").send().await {
+                Ok(response) => {
+                    match response.json::<Vec<Profile>>().await {
+                        Ok(profiles) => Msg::ProfilesLoaded(profiles),
+                        Err(e) => Msg::LoadError(format!("Failed to parse profiles: {}", e)),
+                    }
+                }
+                Err(e) => Msg::LoadError(format!("Failed to fetch profiles: {}", e)),
+            }
+        });
+
         // Fetch library data on startup
         ctx.link().send_future(async {
             match Request::get("/api/library").send().await {
@@ -86,18 +111,18 @@ impl Component for App {
             }
         });
 
-        // Load watched videos from localStorage
-        let watched_videos: HashSet<String> = LocalStorage::get("watched_videos").unwrap_or_default();
-
         Self {
             library: None,
+            profiles: Vec::new(),
+            current_profile: None,
             search_query: String::new(),
             expanded_series: Vec::new(),
             expanded_seasons: Vec::new(),
             loading: true,
+            profiles_loading: true,
             error: None,
             playing_video: None,
-            watched_videos,
+            watched_videos: HashSet::new(),
         }
     }
 
@@ -108,9 +133,35 @@ impl Component for App {
                 self.loading = false;
                 true
             }
+            Msg::ProfilesLoaded(profiles) => {
+                self.profiles = profiles;
+                self.profiles_loading = false;
+
+                // Try to load last selected profile from localStorage
+                if let Ok(last_profile_id) = LocalStorage::get::<String>("current_profile_id") {
+                    if let Some(profile) = self.profiles.iter().find(|p| p.id == last_profile_id) {
+                        self.current_profile = Some(profile.clone());
+                    }
+                }
+
+                // If no profile selected, select the first one
+                if self.current_profile.is_none() && !self.profiles.is_empty() {
+                    self.current_profile = Some(self.profiles[0].clone());
+                    let _ = LocalStorage::set("current_profile_id", &self.profiles[0].id);
+                }
+
+                // Load watched videos for current profile
+                if let Some(profile) = &self.current_profile {
+                    let storage_key = format!("watched_videos_{}", profile.id);
+                    self.watched_videos = LocalStorage::get(&storage_key).unwrap_or_default();
+                }
+
+                true
+            }
             Msg::LoadError(error) => {
                 self.error = Some(error);
                 self.loading = false;
+                self.profiles_loading = false;
                 true
             }
             Msg::UpdateSearch(query) => {
@@ -138,9 +189,12 @@ impl Component for App {
                 // Extract the video path from the URL (remove "/video/" prefix)
                 let path = url.strip_prefix("/video/").unwrap_or(&url).to_string();
 
-                // Mark as watched when playing
+                // Mark as watched when playing (use profile-specific storage)
                 self.watched_videos.insert(path);
-                let _ = LocalStorage::set("watched_videos", &self.watched_videos);
+                if let Some(profile) = &self.current_profile {
+                    let storage_key = format!("watched_videos_{}", profile.id);
+                    let _ = LocalStorage::set(&storage_key, &self.watched_videos);
+                }
 
                 self.playing_video = Some(VideoInfo { url, title });
                 true
@@ -155,7 +209,28 @@ impl Component for App {
                 } else {
                     self.watched_videos.insert(path);
                 }
-                let _ = LocalStorage::set("watched_videos", &self.watched_videos);
+                // Save to profile-specific storage
+                if let Some(profile) = &self.current_profile {
+                    let storage_key = format!("watched_videos_{}", profile.id);
+                    let _ = LocalStorage::set(&storage_key, &self.watched_videos);
+                }
+                true
+            }
+            Msg::SelectProfile(profile) => {
+                // Save watched videos for current profile
+                if let Some(current) = &self.current_profile {
+                    let storage_key = format!("watched_videos_{}", current.id);
+                    let _ = LocalStorage::set(&storage_key, &self.watched_videos);
+                }
+
+                // Switch to new profile
+                self.current_profile = Some(profile.clone());
+                let _ = LocalStorage::set("current_profile_id", &profile.id);
+
+                // Load watched videos for new profile
+                let storage_key = format!("watched_videos_{}", profile.id);
+                self.watched_videos = LocalStorage::get(&storage_key).unwrap_or_default();
+
                 true
             }
         }
@@ -169,7 +244,10 @@ impl Component for App {
                 </style>
 
                 <header>
-                    <h1>{"Media Server"}</h1>
+                    <div class="header-top">
+                        <h1>{"Media Server"}</h1>
+                        {self.render_profile_selector(ctx)}
+                    </div>
                     <input
                         type="text"
                         class="search-bar"
@@ -424,6 +502,36 @@ impl App {
             }
         } else {
             html! {}
+        }
+    }
+
+    fn render_profile_selector(&self, ctx: &Context<Self>) -> Html {
+        if self.profiles.is_empty() {
+            return html! {};
+        }
+
+        html! {
+            <div class="profile-selector">
+                {for self.profiles.iter().map(|profile| {
+                    let is_active = self.current_profile.as_ref()
+                        .map(|p| p.id == profile.id)
+                        .unwrap_or(false);
+                    let profile_clone = profile.clone();
+
+                    html! {
+                        <div
+                            class={classes!("profile-item", is_active.then_some("active"))}
+                            onclick={ctx.link().callback(move |_| {
+                                Msg::SelectProfile(profile_clone.clone())
+                            })}
+                            title={profile.name.clone()}
+                        >
+                            <span class="profile-icon">{&profile.icon}</span>
+                            <span class="profile-name">{&profile.name}</span>
+                        </div>
+                    }
+                })}
+            </div>
         }
     }
 }

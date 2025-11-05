@@ -1,5 +1,22 @@
 {
   "library_path": "/path/to/your/videos",
   "host": "0.0.0.0",
-  "port": 8080
+  "port": 8080,
+  "profiles": [
+    {
+      "id": "default",
+      "name": "Default",
+      "icon": "👤"
+    },
+    {
+      "id": "kids",
+      "name": "Kids",
+      "icon": "👶"
+    },
+    {
+      "id": "personal",
+      "name": "Personal",
+      "icon": "🎬"
+    }
+  ]
 }
