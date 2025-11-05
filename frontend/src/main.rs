@@ -212,6 +212,11 @@ impl Component for App {
                 if let Some(window) = window() {
                     let full_url = format!("{}{}", window.location().origin().unwrap_or_default(), url);
 
+                    // Debug logging
+                    web_sys::console::log_2(&"Copying URL:".into(), &full_url.clone().into());
+                    web_sys::console::log_2(&"Origin:".into(), &window.location().origin().unwrap_or_default().into());
+                    web_sys::console::log_2(&"Path:".into(), &url.clone().into());
+
                     // Try modern Clipboard API first
                     let clipboard = window.navigator().clipboard();
 
