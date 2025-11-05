@@ -221,8 +221,10 @@ impl Component for App {
                         match wasm_bindgen_futures::JsFuture::from(clipboard.write_text(&full_url_clone)).await {
                             Ok(_) => {
                                 // Success with modern API
+                                web_sys::console::log_1(&"Clipboard copy successful (modern API)".into());
                             },
                             Err(_) => {
+                                web_sys::console::log_1(&"Modern clipboard API failed, using fallback".into());
                                 // Fallback to textarea method for Android/older browsers
                                 if let Some(document) = window.document() {
                                     // Create temporary textarea
@@ -240,9 +242,21 @@ impl Component for App {
                                             if let Some(body) = document.body() {
                                                 body.append_child(&textarea).ok();
                                                 textarea.select();
+                                                textarea.set_selection_range(0, 999999).ok();
 
-                                                // Selection should trigger clipboard copy on most browsers
-                                                // execCommand is deprecated and not available in web-sys
+                                                // Use execCommand via JavaScript for Android compatibility
+                                                // This is deprecated but still the most reliable fallback for Android
+                                                let copy_result = js_sys::Reflect::apply(
+                                                    &js_sys::eval("(function(cmd) { return document.execCommand(cmd); })").unwrap(),
+                                                    &wasm_bindgen::JsValue::NULL,
+                                                    &js_sys::Array::of1(&"copy".into())
+                                                );
+
+                                                if copy_result.is_ok() {
+                                                    web_sys::console::log_1(&"Clipboard copy successful (execCommand fallback)".into());
+                                                } else {
+                                                    web_sys::console::log_1(&"Clipboard copy failed (execCommand)".into());
+                                                }
 
                                                 body.remove_child(&textarea).ok();
                                             }
@@ -276,16 +290,27 @@ impl Component for App {
                             // Share API is available - create ShareData
                             let share_data = web_sys::ShareData::new();
                             share_data.set_title(&title);
+                            share_data.set_text(&format!("Watch: {}", &title));
                             share_data.set_url(&full_url);
 
                             // Call navigator.share() - this will show the Android share menu
                             wasm_bindgen_futures::spawn_local(async move {
-                                let _ = wasm_bindgen_futures::JsFuture::from(
+                                match wasm_bindgen_futures::JsFuture::from(
                                     navigator.share_with_data(&share_data)
-                                ).await;
+                                ).await {
+                                    Ok(_) => {
+                                        // Successfully shared
+                                        web_sys::console::log_1(&"Share successful".into());
+                                    },
+                                    Err(e) => {
+                                        // Share failed or was cancelled
+                                        web_sys::console::log_2(&"Share failed:".into(), &e);
+                                    }
+                                }
                             });
                         } else {
                             // Fallback: copy to clipboard if share is not available
+                            web_sys::console::log_1(&"Share API not available, using clipboard".into());
                             let clipboard = navigator.clipboard();
                             wasm_bindgen_futures::spawn_local(async move {
                                 let _ = wasm_bindgen_futures::JsFuture::from(
