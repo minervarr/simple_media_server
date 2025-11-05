@@ -8,18 +8,28 @@
 namespace fs = std::filesystem;
 using json = nlohmann::json;
 
+// Profile structure
+struct Profile {
+    std::string id;
+    std::string name;
+    std::string icon;
+};
+
 // Configuration structure
 struct Config {
     std::string libraryPath;
     int port = 8080;
     std::string host = "0.0.0.0";
+    std::vector<Profile> profiles;
 
     static Config load(const std::string& configFile) {
         Config config;
 
         if (!fs::exists(configFile)) {
             std::cerr << "Config file not found: " << configFile << std::endl;
-            std::cerr << "Using default configuration" << std::endl;
+            std::cerr << "Using default configuration with default profile" << std::endl;
+            // Add default profile if no config
+            config.profiles.push_back({"default", "Default", "👤"});
             return config;
         }
 
@@ -37,9 +47,33 @@ struct Config {
             if (j.contains("host")) {
                 config.host = j["host"].get<std::string>();
             }
+            if (j.contains("profiles") && j["profiles"].is_array()) {
+                auto profilesArray = j["profiles"];
+                // Limit to max 5 profiles
+                size_t maxProfiles = std::min(profilesArray.size(), size_t(5));
+                for (size_t i = 0; i < maxProfiles; i++) {
+                    auto& p = profilesArray[i];
+                    if (p.contains("id") && p.contains("name")) {
+                        Profile profile;
+                        profile.id = p["id"].get<std::string>();
+                        profile.name = p["name"].get<std::string>();
+                        profile.icon = p.contains("icon") ? p["icon"].get<std::string>() : "👤";
+                        config.profiles.push_back(profile);
+                    }
+                }
+            }
+
+            // If no profiles configured, add default
+            if (config.profiles.empty()) {
+                config.profiles.push_back({"default", "Default", "👤"});
+            }
         } catch (const std::exception& e) {
             std::cerr << "Error parsing config: " << e.what() << std::endl;
             std::cerr << "Using default configuration" << std::endl;
+            // Add default profile on error
+            if (config.profiles.empty()) {
+                config.profiles.push_back({"default", "Default", "👤"});
+            }
         }
 
         return config;
@@ -92,6 +126,19 @@ int main(int argc, char** argv) {
     // Handle OPTIONS requests (CORS preflight)
     server.Options(".*", [](const httplib::Request&, httplib::Response& res) {
         res.status = 200;
+    });
+
+    // API endpoint: Get profiles
+    server.Get("/api/profiles", [&config](const httplib::Request&, httplib::Response& res) {
+        json profilesJson = json::array();
+        for (const auto& profile : config.profiles) {
+            profilesJson.push_back({
+                {"id", profile.id},
+                {"name", profile.name},
+                {"icon", profile.icon}
+            });
+        }
+        res.set_content(profilesJson.dump(), "application/json");
     });
 
     // API endpoint: Get library structure
