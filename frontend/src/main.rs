@@ -246,8 +246,11 @@ impl Component for App {
 
                                                 // Use execCommand via JavaScript for Android compatibility
                                                 // This is deprecated but still the most reliable fallback for Android
+                                                use wasm_bindgen::JsCast;
+                                                let exec_fn = js_sys::eval("(function(cmd) { return document.execCommand(cmd); })").unwrap();
+                                                let exec_fn = exec_fn.dyn_into::<js_sys::Function>().unwrap();
                                                 let copy_result = js_sys::Reflect::apply(
-                                                    &js_sys::eval("(function(cmd) { return document.execCommand(cmd); })").unwrap(),
+                                                    &exec_fn,
                                                     &wasm_bindgen::JsValue::NULL,
                                                     &js_sys::Array::of1(&"copy".into())
                                                 );
