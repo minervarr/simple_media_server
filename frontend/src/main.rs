@@ -208,18 +208,48 @@ impl Component for App {
                 true
             }
             Msg::CopyVideoLink(url, path) => {
-                // Try to copy to clipboard
+                // Try to copy to clipboard with fallback for Android
                 if let Some(window) = window() {
-                    let clipboard = window.navigator().clipboard();
                     let full_url = format!("{}{}", window.location().origin().unwrap_or_default(), url);
-                    let promise = clipboard.write_text(&full_url);
 
-                    // Handle the promise
-                    let path_clone = path.clone();
+                    // Try modern Clipboard API first
+                    let clipboard = window.navigator().clipboard();
+
+                    // Use modern API and handle errors by falling back to textarea method
                     let link = _ctx.link().clone();
+                    let full_url_clone = full_url.clone();
                     wasm_bindgen_futures::spawn_local(async move {
-                        let _ = wasm_bindgen_futures::JsFuture::from(promise).await;
-                        link.send_message(Msg::ClearCopiedState);
+                        match wasm_bindgen_futures::JsFuture::from(clipboard.write_text(&full_url_clone)).await {
+                            Ok(_) => {
+                                // Success with modern API
+                            },
+                            Err(_) => {
+                                // Fallback to textarea method for Android/older browsers
+                                if let Some(window) = window() {
+                                    if let Some(document) = window.document() {
+                                        // Create temporary textarea
+                                        if let Ok(textarea) = document.create_element("textarea") {
+                                            use wasm_bindgen::JsCast;
+                                            if let Ok(textarea) = textarea.dyn_into::<web_sys::HtmlTextAreaElement>() {
+                                                textarea.set_value(&full_url_clone);
+                                                textarea.style().set_property("position", "fixed").ok();
+                                                textarea.style().set_property("opacity", "0").ok();
+
+                                                if let Some(body) = document.body() {
+                                                    body.append_child(&textarea).ok();
+                                                    textarea.select();
+
+                                                    // Try execCommand as fallback
+                                                    document.exec_command("copy").ok();
+
+                                                    body.remove_child(&textarea).ok();
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     });
 
                     self.copied_video = Some(path.clone());
@@ -239,19 +269,31 @@ impl Component for App {
                     let navigator = window.navigator();
                     let full_url = format!("{}{}", window.location().origin().unwrap_or_default(), url);
 
-                    // Create ShareData with proper setter methods
-                    let mut share_data = web_sys::ShareData::new();
-                    share_data.set_title(&title);
-                    share_data.set_url(&full_url);
+                    // Check if share API is available using JavaScript reflection
+                    use wasm_bindgen::JsCast;
+                    if let Ok(share_fn) = js_sys::Reflect::get(&navigator, &"share".into()) {
+                        if !share_fn.is_undefined() {
+                            // Share API is available - create ShareData
+                            let share_data = web_sys::ShareData::new();
+                            share_data.set_title(&title);
+                            share_data.set_url(&full_url);
 
-                    // Try to use the share API if available
-                    // This will trigger the native Android share menu
-                    let share_result = navigator.share_with_data(&share_data);
-
-                    // Handle the promise (optional - could show error if sharing fails)
-                    wasm_bindgen_futures::spawn_local(async move {
-                        let _ = wasm_bindgen_futures::JsFuture::from(share_result).await;
-                    });
+                            // Call navigator.share() - this will show the Android share menu
+                            wasm_bindgen_futures::spawn_local(async move {
+                                let _ = wasm_bindgen_futures::JsFuture::from(
+                                    navigator.share_with_data(&share_data)
+                                ).await;
+                            });
+                        } else {
+                            // Fallback: copy to clipboard if share is not available
+                            let clipboard = navigator.clipboard();
+                            wasm_bindgen_futures::spawn_local(async move {
+                                let _ = wasm_bindgen_futures::JsFuture::from(
+                                    clipboard.write_text(&full_url)
+                                ).await;
+                            });
+                        }
+                    }
                 }
                 true
             }
