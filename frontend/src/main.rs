@@ -212,18 +212,17 @@ impl Component for App {
                 // Try to copy to clipboard
                 if let Some(window) = window() {
                     let navigator = window.navigator();
-                    if let Ok(clipboard) = navigator.clipboard() {
-                        let full_url = format!("{}{}", window.location().origin().unwrap_or_default(), url);
-                        let _ = clipboard.write_text(&full_url);
-                        self.copied_video = Some(path.clone());
+                    let clipboard = navigator.clipboard();
+                    let full_url = format!("{}{}", window.location().origin().unwrap_or_default(), url);
+                    let _ = clipboard.write_text(&full_url);
+                    self.copied_video = Some(path.clone());
 
-                        // Clear the copied state after 2 seconds
-                        let link = _ctx.link().clone();
-                        wasm_bindgen_futures::spawn_local(async move {
-                            gloo_timers::future::TimeoutFuture::new(2000).await;
-                            link.send_message(Msg::ClearCopiedState);
-                        });
-                    }
+                    // Clear the copied state after 2 seconds
+                    let link = _ctx.link().clone();
+                    wasm_bindgen_futures::spawn_local(async move {
+                        gloo_timers::future::TimeoutFuture::new(2000).await;
+                        link.send_message(Msg::ClearCopiedState);
+                    });
                 }
                 true
             }
