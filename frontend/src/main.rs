@@ -216,7 +216,6 @@ impl Component for App {
                     let clipboard = window.navigator().clipboard();
 
                     // Use modern API and handle errors by falling back to textarea method
-                    let link = _ctx.link().clone();
                     let full_url_clone = full_url.clone();
                     wasm_bindgen_futures::spawn_local(async move {
                         match wasm_bindgen_futures::JsFuture::from(clipboard.write_text(&full_url_clone)).await {
