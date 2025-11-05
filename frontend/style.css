@@ -181,12 +181,12 @@ h2 {
 .episode {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
     padding: 0.7rem 1rem 0.7rem 3rem;
     color: #cccccc;
     text-decoration: none;
     transition: background-color 0.2s;
     border-left: 3px solid transparent;
+    position: relative;
 }
 
 .episode:hover {
@@ -196,6 +196,23 @@ h2 {
 
 .episode:active {
     background-color: #1a1a1a;
+}
+
+.episode.watched {
+    opacity: 0.6;
+}
+
+.episode.watched .episode-name {
+    text-decoration: line-through;
+    text-decoration-color: #555555;
+}
+
+.episode-content {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex: 1;
+    cursor: pointer;
 }
 
 .episode-number {
@@ -210,6 +227,29 @@ h2 {
     font-size: 0.95rem;
 }
 
+.watched-indicator {
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 0.25rem 0.5rem;
+    color: #666666;
+    transition: color 0.2s;
+    user-select: none;
+    min-width: 2rem;
+    text-align: center;
+}
+
+.watched-indicator:hover {
+    color: #00aa00;
+}
+
+.episode.watched .watched-indicator {
+    color: #00aa00;
+}
+
+.episode.watched .watched-indicator:hover {
+    color: #666666;
+}
+
 /* Movies */
 .movie-list {
     display: grid;
@@ -218,7 +258,8 @@ h2 {
 }
 
 .movie {
-    display: block;
+    display: flex;
+    flex-direction: column;
     background-color: #0a0a0a;
     border: 1px solid #1a1a1a;
     border-radius: 8px;
@@ -227,6 +268,7 @@ h2 {
     color: #ffffff;
     transition: all 0.2s;
     text-align: center;
+    position: relative;
 }
 
 .movie:hover {
@@ -239,9 +281,36 @@ h2 {
     transform: translateY(0);
 }
 
+.movie.watched {
+    opacity: 0.6;
+}
+
+.movie.watched .movie-name {
+    text-decoration: line-through;
+    text-decoration-color: #555555;
+}
+
+.movie-content {
+    cursor: pointer;
+    flex: 1;
+}
+
 .movie-name {
     font-size: 1rem;
     line-height: 1.4;
+}
+
+.movie .watched-indicator {
+    margin-top: 0.75rem;
+    font-size: 1.5rem;
+}
+
+.movie.watched .watched-indicator {
+    color: #00aa00;
+}
+
+.movie.watched .watched-indicator:hover {
+    color: #666666;
 }
 
 /* Mobile Responsiveness */
@@ -284,5 +353,107 @@ h2 {
 
     .movie-list {
         grid-template-columns: 1fr 1fr;
+    }
+}
+
+/* Video Player Overlay */
+.video-player-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.95);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 1rem;
+}
+
+.video-player-container {
+    background-color: #0a0a0a;
+    border-radius: 12px;
+    overflow: hidden;
+    width: 100%;
+    max-width: 1400px;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid #2a2a2a;
+}
+
+.video-player-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1.5rem;
+    background-color: #151515;
+    border-bottom: 1px solid #2a2a2a;
+}
+
+.video-player-header h3 {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 500;
+    color: #ffffff;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding-right: 1rem;
+}
+
+.close-button {
+    background: none;
+    border: none;
+    color: #888888;
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 0.25rem 0.5rem;
+    line-height: 1;
+    transition: color 0.2s;
+    min-width: 2rem;
+    text-align: center;
+}
+
+.close-button:hover {
+    color: #ffffff;
+}
+
+.close-button:active {
+    color: #cccccc;
+}
+
+.video-player-container video {
+    width: 100%;
+    max-height: calc(90vh - 4rem);
+    background-color: #000000;
+    outline: none;
+}
+
+/* Video Player Mobile Responsiveness */
+@media (max-width: 768px) {
+    .video-player-overlay {
+        padding: 0;
+    }
+
+    .video-player-container {
+        max-width: 100%;
+        max-height: 100vh;
+        border-radius: 0;
+        border: none;
+    }
+
+    .video-player-header {
+        padding: 1rem;
+    }
+
+    .video-player-header h3 {
+        font-size: 1rem;
+    }
+
+    .video-player-container video {
+        max-height: calc(100vh - 3.5rem);
     }
 }

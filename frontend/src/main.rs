@@ -2,6 +2,8 @@ use yew::prelude::*;
 use serde::{Deserialize, Serialize};
 use gloo_net::http::Request;
 use web_sys::HtmlInputElement;
+use gloo_storage::{LocalStorage, Storage};
+use std::collections::HashSet;
 
 // Data structures matching backend JSON
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
@@ -45,6 +47,14 @@ struct App {
     expanded_seasons: Vec<String>,
     loading: bool,
     error: Option<String>,
+    playing_video: Option<VideoInfo>,
+    watched_videos: HashSet<String>,
+}
+
+#[derive(Clone, PartialEq)]
+struct VideoInfo {
+    url: String,
+    title: String,
 }
 
 enum Msg {
@@ -53,6 +63,9 @@ enum Msg {
     UpdateSearch(String),
     ToggleSeries(String),
     ToggleSeason(String, u32),
+    PlayVideo(String, String), // (url, title)
+    CloseVideo,
+    ToggleWatched(String), // video path
 }
 
 impl Component for App {
@@ -73,6 +86,9 @@ impl Component for App {
             }
         });
 
+        // Load watched videos from localStorage
+        let watched_videos: HashSet<String> = LocalStorage::get("watched_videos").unwrap_or_default();
+
         Self {
             library: None,
             search_query: String::new(),
@@ -80,6 +96,8 @@ impl Component for App {
             expanded_seasons: Vec::new(),
             loading: true,
             error: None,
+            playing_video: None,
+            watched_videos,
         }
     }
 
@@ -116,6 +134,30 @@ impl Component for App {
                 }
                 true
             }
+            Msg::PlayVideo(url, title) => {
+                // Extract the video path from the URL (remove "/video/" prefix)
+                let path = url.strip_prefix("/video/").unwrap_or(&url).to_string();
+
+                // Mark as watched when playing
+                self.watched_videos.insert(path);
+                let _ = LocalStorage::set("watched_videos", &self.watched_videos);
+
+                self.playing_video = Some(VideoInfo { url, title });
+                true
+            }
+            Msg::CloseVideo => {
+                self.playing_video = None;
+                true
+            }
+            Msg::ToggleWatched(path) => {
+                if self.watched_videos.contains(&path) {
+                    self.watched_videos.remove(&path);
+                } else {
+                    self.watched_videos.insert(path);
+                }
+                let _ = LocalStorage::set("watched_videos", &self.watched_videos);
+                true
+            }
         }
     }
 
@@ -142,6 +184,8 @@ impl Component for App {
                 <main>
                     {self.render_content(ctx)}
                 </main>
+
+                {self.render_video_player(ctx)}
             </div>
         }
     }
@@ -179,7 +223,7 @@ impl App {
                             <section class="movies-section">
                                 <h2>{"Movies"}</h2>
                                 <div class="movie-list">
-                                    {for filtered_movies.iter().map(|m| self.render_movie(m))}
+                                    {for filtered_movies.iter().map(|m| self.render_movie(ctx, m))}
                                 </div>
                             </section>
                         }
@@ -276,7 +320,7 @@ impl App {
                 {if is_expanded {
                     html! {
                         <div class="episodes">
-                            {for season.episodes.iter().map(|ep| self.render_episode(ep))}
+                            {for season.episodes.iter().map(|ep| self.render_episode(ctx, ep))}
                         </div>
                     }
                 } else {
@@ -286,28 +330,100 @@ impl App {
         }
     }
 
-    fn render_episode(&self, episode: &Video) -> Html {
+    fn render_episode(&self, ctx: &Context<Self>, episode: &Video) -> Html {
         let video_url = format!("/video/{}", episode.path);
+        let title = episode.filename.clone();
+        let url_clone = video_url.clone();
+        let path = episode.path.clone();
+        let path_for_toggle = path.clone();
+        let is_watched = self.watched_videos.contains(&path);
 
         html! {
-            <a href={video_url.clone()} class="episode" target="_blank">
-                {if let Some(ep_num) = episode.episode {
-                    html! { <span class="episode-number">{format!("E{:02}", ep_num)}</span> }
-                } else {
-                    html! {}
-                }}
-                <span class="episode-name">{&episode.filename}</span>
-            </a>
+            <div class={classes!("episode", is_watched.then_some("watched"))}>
+                <div
+                    class="episode-content"
+                    onclick={ctx.link().callback(move |_| {
+                        Msg::PlayVideo(url_clone.clone(), title.clone())
+                    })}
+                >
+                    {if let Some(ep_num) = episode.episode {
+                        html! { <span class="episode-number">{format!("E{:02}", ep_num)}</span> }
+                    } else {
+                        html! {}
+                    }}
+                    <span class="episode-name">{&episode.filename}</span>
+                </div>
+                <div
+                    class="watched-indicator"
+                    onclick={ctx.link().callback(move |e: MouseEvent| {
+                        e.stop_propagation();
+                        Msg::ToggleWatched(path_for_toggle.clone())
+                    })}
+                    title={if is_watched { "Mark as unwatched" } else { "Mark as watched" }}
+                >
+                    {if is_watched { "✓" } else { "○" }}
+                </div>
+            </div>
         }
     }
 
-    fn render_movie(&self, movie: &Movie) -> Html {
+    fn render_movie(&self, ctx: &Context<Self>, movie: &Movie) -> Html {
         let video_url = format!("/video/{}", movie.path);
+        let title = movie.name.clone();
+        let url_clone = video_url.clone();
+        let path = movie.path.clone();
+        let path_for_toggle = path.clone();
+        let is_watched = self.watched_videos.contains(&path);
 
         html! {
-            <a href={video_url} class="movie" target="_blank">
-                <div class="movie-name">{&movie.name}</div>
-            </a>
+            <div class={classes!("movie", is_watched.then_some("watched"))}>
+                <div
+                    class="movie-content"
+                    onclick={ctx.link().callback(move |_| {
+                        Msg::PlayVideo(url_clone.clone(), title.clone())
+                    })}
+                >
+                    <div class="movie-name">{&movie.name}</div>
+                </div>
+                <div
+                    class="watched-indicator"
+                    onclick={ctx.link().callback(move |e: MouseEvent| {
+                        e.stop_propagation();
+                        Msg::ToggleWatched(path_for_toggle.clone())
+                    })}
+                    title={if is_watched { "Mark as unwatched" } else { "Mark as watched" }}
+                >
+                    {if is_watched { "✓" } else { "○" }}
+                </div>
+            </div>
+        }
+    }
+
+    fn render_video_player(&self, ctx: &Context<Self>) -> Html {
+        if let Some(video) = &self.playing_video {
+            html! {
+                <div class="video-player-overlay">
+                    <div class="video-player-container">
+                        <div class="video-player-header">
+                            <h3>{&video.title}</h3>
+                            <button
+                                class="close-button"
+                                onclick={ctx.link().callback(|_| Msg::CloseVideo)}
+                            >
+                                {"✕"}
+                            </button>
+                        </div>
+                        <video
+                            controls=true
+                            autoplay=true
+                            preload="metadata"
+                            src={video.url.clone()}
+                        />
+                    </div>
+                </div>
+            }
+        } else {
+            html! {}
         }
     }
 }
