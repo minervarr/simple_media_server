@@ -225,12 +225,11 @@ impl Component for App {
                             },
                             Err(_) => {
                                 // Fallback to textarea method for Android/older browsers
-                                if let Some(window) = window() {
-                                    if let Some(document) = window.document() {
-                                        // Create temporary textarea
-                                        if let Ok(textarea) = document.create_element("textarea") {
-                                            use wasm_bindgen::JsCast;
-                                            if let Ok(textarea) = textarea.dyn_into::<web_sys::HtmlTextAreaElement>() {
+                                if let Some(document) = window.document() {
+                                    // Create temporary textarea
+                                    if let Ok(textarea) = document.create_element("textarea") {
+                                        use wasm_bindgen::JsCast;
+                                        if let Ok(textarea) = textarea.dyn_into::<web_sys::HtmlTextAreaElement>() {
                                                 textarea.set_value(&full_url_clone);
                                                 textarea.style().set_property("position", "fixed").ok();
                                                 textarea.style().set_property("opacity", "0").ok();
@@ -247,7 +246,6 @@ impl Component for App {
                                             }
                                         }
                                     }
-                                }
                             }
                         }
                     });
