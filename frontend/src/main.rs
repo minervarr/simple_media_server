@@ -5,7 +5,7 @@ use web_sys::HtmlInputElement;
 use gloo_storage::{LocalStorage, Storage};
 use std::collections::HashSet;
 use wasm_bindgen::JsCast;
-use web_sys::{window, Navigator};
+use web_sys::window;
 
 // Data structures matching backend JSON
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
@@ -211,19 +211,18 @@ impl Component for App {
             Msg::CopyVideoLink(url, path) => {
                 // Try to copy to clipboard
                 if let Some(window) = window() {
-                    if let Some(navigator) = window.navigator() {
-                        if let Ok(clipboard) = navigator.clipboard() {
-                            let full_url = format!("{}{}", window.location().origin().unwrap_or_default(), url);
-                            let _ = clipboard.write_text(&full_url);
-                            self.copied_video = Some(path.clone());
+                    let navigator = window.navigator();
+                    if let Ok(clipboard) = navigator.clipboard() {
+                        let full_url = format!("{}{}", window.location().origin().unwrap_or_default(), url);
+                        let _ = clipboard.write_text(&full_url);
+                        self.copied_video = Some(path.clone());
 
-                            // Clear the copied state after 2 seconds
-                            let link = _ctx.link().clone();
-                            wasm_bindgen_futures::spawn_local(async move {
-                                gloo_timers::future::TimeoutFuture::new(2000).await;
-                                link.send_message(Msg::ClearCopiedState);
-                            });
-                        }
+                        // Clear the copied state after 2 seconds
+                        let link = _ctx.link().clone();
+                        wasm_bindgen_futures::spawn_local(async move {
+                            gloo_timers::future::TimeoutFuture::new(2000).await;
+                            link.send_message(Msg::ClearCopiedState);
+                        });
                     }
                 }
                 true
@@ -231,22 +230,21 @@ impl Component for App {
             Msg::ShareVideo(url, title) => {
                 // Try to use Web Share API (mobile devices)
                 if let Some(window) = window() {
-                    if let Some(navigator) = window.navigator() {
-                        let full_url = format!("{}{}", window.location().origin().unwrap_or_default(), url);
+                    let navigator = window.navigator();
+                    let full_url = format!("{}{}", window.location().origin().unwrap_or_default(), url);
 
-                        // Use share API if available
-                        let share_data = js_sys::Object::new();
-                        js_sys::Reflect::set(&share_data, &"title".into(), &title.into()).ok();
-                        js_sys::Reflect::set(&share_data, &"url".into(), &full_url.into()).ok();
+                    // Use share API if available
+                    let share_data = js_sys::Object::new();
+                    js_sys::Reflect::set(&share_data, &"title".into(), &title.into()).ok();
+                    js_sys::Reflect::set(&share_data, &"url".into(), &full_url.into()).ok();
 
-                        if let Ok(share) = js_sys::Reflect::get(&navigator, &"share".into()) {
-                            if !share.is_undefined() {
-                                let _ = js_sys::Reflect::apply(
-                                    &share.unchecked_into(),
-                                    &navigator.into(),
-                                    &js_sys::Array::of1(&share_data)
-                                );
-                            }
+                    if let Ok(share) = js_sys::Reflect::get(&navigator, &"share".into()) {
+                        if !share.is_undefined() {
+                            let _ = js_sys::Reflect::apply(
+                                &share.unchecked_into(),
+                                &navigator.into(),
+                                &js_sys::Array::of1(&share_data)
+                            );
                         }
                     }
                 }
