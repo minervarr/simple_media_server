@@ -211,18 +211,27 @@ impl Component for App {
             Msg::CopyVideoLink(url, path) => {
                 // Try to copy to clipboard
                 if let Some(window) = window() {
-                    let navigator = window.navigator();
-                    let clipboard = navigator.clipboard();
-                    let full_url = format!("{}{}", window.location().origin().unwrap_or_default(), url);
-                    let _ = clipboard.write_text(&full_url);
-                    self.copied_video = Some(path.clone());
+                    if let Some(clipboard) = window.navigator().clipboard() {
+                        let full_url = format!("{}{}", window.location().origin().unwrap_or_default(), url);
+                        let promise = clipboard.write_text(&full_url);
 
-                    // Clear the copied state after 2 seconds
-                    let link = _ctx.link().clone();
-                    wasm_bindgen_futures::spawn_local(async move {
-                        gloo_timers::future::TimeoutFuture::new(2000).await;
-                        link.send_message(Msg::ClearCopiedState);
-                    });
+                        // Handle the promise
+                        let path_clone = path.clone();
+                        let link = _ctx.link().clone();
+                        wasm_bindgen_futures::spawn_local(async move {
+                            let _ = wasm_bindgen_futures::JsFuture::from(promise).await;
+                            link.send_message(Msg::ClearCopiedState);
+                        });
+
+                        self.copied_video = Some(path.clone());
+
+                        // Clear the copied state after 2 seconds
+                        let link = _ctx.link().clone();
+                        wasm_bindgen_futures::spawn_local(async move {
+                            gloo_timers::future::TimeoutFuture::new(2000).await;
+                            link.send_message(Msg::ClearCopiedState);
+                        });
+                    }
                 }
                 true
             }
@@ -232,16 +241,19 @@ impl Component for App {
                     let navigator = window.navigator();
                     let full_url = format!("{}{}", window.location().origin().unwrap_or_default(), url);
 
-                    // Use share API if available
-                    let share_data = js_sys::Object::new();
-                    js_sys::Reflect::set(&share_data, &"title".into(), &title.into()).ok();
-                    js_sys::Reflect::set(&share_data, &"url".into(), &full_url.into()).ok();
+                    // Create ShareData
+                    let mut share_data = web_sys::ShareData::new();
+                    share_data.title(&title);
+                    share_data.url(&full_url);
 
-                    if let Ok(share) = js_sys::Reflect::get(&navigator, &"share".into()) {
-                        if !share.is_undefined() {
+                    // Call share API using wasm_bindgen
+                    use wasm_bindgen::JsCast;
+                    if let Ok(share_fn) = js_sys::Reflect::get(&navigator, &"share".into()) {
+                        if !share_fn.is_undefined() {
+                            // Call navigator.share(shareData)
                             let _ = js_sys::Reflect::apply(
-                                &share.unchecked_into(),
-                                &navigator.into(),
+                                &share_fn.dyn_into::<js_sys::Function>().unwrap(),
+                                &navigator,
                                 &js_sys::Array::of1(&share_data)
                             );
                         }
