@@ -62,6 +62,13 @@ struct App {
     error: Option<String>,
     watched_videos: HashSet<String>,
     copied_video: Option<String>, // Track which video was just copied
+    playing_video: Option<VideoInfo>,
+}
+
+#[derive(Clone, PartialEq)]
+struct VideoInfo {
+    path: String,
+    title: String,
 }
 
 enum Msg {
@@ -71,6 +78,8 @@ enum Msg {
     UpdateSearch(String),
     ToggleSeries(String),
     ToggleSeason(String, u32),
+    PlayVideo(String, String), // (path, title)
+    CloseVideo,
     CopyVideoLink(String, String), // (url, path)
     ShareVideo(String, String), // (url, title)
     ToggleWatched(String), // video path
@@ -123,6 +132,7 @@ impl Component for App {
             error: None,
             watched_videos: HashSet::new(),
             copied_video: None,
+            playing_video: None,
         }
     }
 
@@ -181,6 +191,21 @@ impl Component for App {
                 } else {
                     self.expanded_seasons.push(key);
                 }
+                true
+            }
+            Msg::PlayVideo(path, title) => {
+                // Mark as watched when playing
+                self.watched_videos.insert(path.clone());
+                if let Some(profile) = &self.current_profile {
+                    let storage_key = format!("watched_videos_{}", profile.id);
+                    let _ = LocalStorage::set(&storage_key, &self.watched_videos);
+                }
+
+                self.playing_video = Some(VideoInfo { path, title });
+                true
+            }
+            Msg::CloseVideo => {
+                self.playing_video = None;
                 true
             }
             Msg::CopyVideoLink(url, path) => {
@@ -302,6 +327,8 @@ impl Component for App {
                             <main>
                                 {self.render_content(ctx)}
                             </main>
+
+                            {self.render_video_player(ctx)}
                         </>
                     }
                 }}
@@ -456,6 +483,8 @@ impl App {
         let is_watched = self.watched_videos.contains(&path);
         let is_copied = self.copied_video.as_ref() == Some(&path);
 
+        let path_for_play = path.clone();
+        let title_for_play = title.clone();
         let url_for_copy = video_url.clone();
         let path_for_copy = path.clone();
         let url_for_share = video_url.clone();
@@ -473,6 +502,16 @@ impl App {
                     <span class="episode-name">{&episode.filename}</span>
                 </div>
                 <div class="episode-actions">
+                    <button
+                        class="action-button play-button"
+                        onclick={ctx.link().callback(move |e: MouseEvent| {
+                            e.stop_propagation();
+                            Msg::PlayVideo(path_for_play.clone(), title_for_play.clone())
+                        })}
+                        title="Play"
+                    >
+                        {"▶"}
+                    </button>
                     <button
                         class={classes!("action-button", "copy-button", is_copied.then_some("copied"))}
                         onclick={ctx.link().callback(move |e: MouseEvent| {
@@ -515,6 +554,8 @@ impl App {
         let is_watched = self.watched_videos.contains(&path);
         let is_copied = self.copied_video.as_ref() == Some(&path);
 
+        let path_for_play = path.clone();
+        let title_for_play = title.clone();
         let url_for_copy = video_url.clone();
         let path_for_copy = path.clone();
         let url_for_share = video_url.clone();
@@ -525,6 +566,16 @@ impl App {
             <div class={classes!("movie", is_watched.then_some("watched"))}>
                 <div class="movie-name">{&movie.name}</div>
                 <div class="movie-actions">
+                    <button
+                        class="action-button play-button"
+                        onclick={ctx.link().callback(move |e: MouseEvent| {
+                            e.stop_propagation();
+                            Msg::PlayVideo(path_for_play.clone(), title_for_play.clone())
+                        })}
+                        title="Play"
+                    >
+                        {"▶"}
+                    </button>
                     <button
                         class={classes!("action-button", "copy-button", is_copied.then_some("copied"))}
                         onclick={ctx.link().callback(move |e: MouseEvent| {
@@ -615,6 +666,38 @@ impl App {
                 >
                     <span class="profile-switcher-icon">{&profile.icon}</span>
                     <span class="profile-switcher-name">{&profile.name}</span>
+                </div>
+            }
+        } else {
+            html! {}
+        }
+    }
+
+    fn render_video_player(&self, ctx: &Context<Self>) -> Html {
+        if let Some(video) = &self.playing_video {
+            // Build HLS playlist URL
+            let hls_url = format!("/hls/{}/playlist.m3u8", video.path);
+
+            html! {
+                <div class="video-player-overlay">
+                    <div class="video-player-container">
+                        <div class="video-player-header">
+                            <h3>{&video.title}</h3>
+                            <button
+                                class="close-button"
+                                onclick={ctx.link().callback(|_| Msg::CloseVideo)}
+                            >
+                                {"✕"}
+                            </button>
+                        </div>
+                        <video
+                            id="hls-video"
+                            class="hls-video"
+                            controls=true
+                            autoplay=true
+                            data-hls-url={hls_url}
+                        />
+                    </div>
                 </div>
             }
         } else {

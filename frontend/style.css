@@ -380,6 +380,15 @@ h2 {
     background-color: #0a2a0a;
 }
 
+.play-button {
+    color: #00aa00;
+}
+
+.play-button:hover {
+    color: #00ff00;
+    background-color: #0a2a0a;
+}
+
 .watched-indicator {
     font-size: 1.2rem;
     cursor: pointer;
@@ -582,3 +591,104 @@ h2 {
     }
 }
 
+/* Video Player Overlay */
+.video-player-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.95);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 1rem;
+}
+
+.video-player-container {
+    background-color: #0a0a0a;
+    border-radius: 12px;
+    overflow: hidden;
+    width: 100%;
+    max-width: 1400px;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid #2a2a2a;
+}
+
+.video-player-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1.5rem;
+    background-color: #151515;
+    border-bottom: 1px solid #2a2a2a;
+}
+
+.video-player-header h3 {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 500;
+    color: #ffffff;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding-right: 1rem;
+}
+
+.close-button {
+    background: none;
+    border: none;
+    color: #888888;
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 0.25rem 0.5rem;
+    line-height: 1;
+    transition: color 0.2s;
+    min-width: 2rem;
+    text-align: center;
+}
+
+.close-button:hover {
+    color: #ffffff;
+}
+
+.close-button:active {
+    color: #cccccc;
+}
+
+.hls-video {
+    width: 100%;
+    max-height: calc(90vh - 4rem);
+    background-color: #000000;
+    outline: none;
+}
+
+/* Video Player Mobile Responsiveness */
+@media (max-width: 768px) {
+    .video-player-overlay {
+        padding: 0;
+    }
+
+    .video-player-container {
+        max-width: 100%;
+        max-height: 100vh;
+        border-radius: 0;
+        border: none;
+    }
+
+    .video-player-header {
+        padding: 1rem;
+    }
+
+    .video-player-header h3 {
+        font-size: 1rem;
+    }
+
+    .hls-video {
+        max-height: calc(100vh - 3.5rem);
+    }
+}

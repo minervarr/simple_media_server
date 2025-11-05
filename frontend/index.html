@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#000000">
     <title>Simple Media Server</title>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
     <style>
         body {
             margin: 0;
@@ -30,6 +31,57 @@
     <script type="module">
         import init from './media-frontend.js';
         init();
+    </script>
+    <script>
+        // HLS.js initialization
+        function initHLS() {
+            const video = document.getElementById('hls-video');
+            if (!video) return;
+
+            const hlsUrl = video.getAttribute('data-hls-url');
+            if (!hlsUrl) return;
+
+            if (Hls.isSupported()) {
+                const hls = new Hls({
+                    debug: false,
+                    enableWorker: true,
+                    lowLatencyMode: true,
+                    backBufferLength: 90,
+                });
+
+                hls.loadSource(hlsUrl);
+                hls.attachMedia(video);
+
+                hls.on(Hls.Events.MANIFEST_PARSED, function() {
+                    video.play();
+                });
+
+                hls.on(Hls.Events.ERROR, function(event, data) {
+                    console.error('HLS error:', data);
+                });
+
+                // Cleanup on video removal
+                video.addEventListener('remove', () => {
+                    hls.destroy();
+                });
+            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                // Native HLS support (Safari)
+                video.src = hlsUrl;
+            }
+        }
+
+        // Watch for video element changes
+        const observer = new MutationObserver(() => {
+            initHLS();
+        });
+
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+
+        // Try to initialize on load
+        document.addEventListener('DOMContentLoaded', initHLS);
     </script>
 </body>
 </html>
