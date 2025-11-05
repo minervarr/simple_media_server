@@ -208,72 +208,71 @@ impl Component for App {
                 true
             }
             Msg::CopyVideoLink(url, path) => {
-                // Try to copy to clipboard with fallback for Android
+                // Try to copy to clipboard - use simple synchronous approach for Android
                 if let Some(window) = window() {
                     let full_url = format!("{}{}", window.location().origin().unwrap_or_default(), url);
 
-                    // Debug logging
                     web_sys::console::log_2(&"Copying URL:".into(), &full_url.clone().into());
-                    web_sys::console::log_2(&"Origin:".into(), &window.location().origin().unwrap_or_default().into());
-                    web_sys::console::log_2(&"Path:".into(), &url.clone().into());
 
-                    // Try modern Clipboard API first
+                    // Try clipboard API with immediate fallback
                     let clipboard = window.navigator().clipboard();
+                    let full_url_for_async = full_url.clone();
 
-                    // Use modern API and handle errors by falling back to textarea method
-                    let full_url_clone = full_url.clone();
+                    // Start async clipboard attempt
                     wasm_bindgen_futures::spawn_local(async move {
-                        match wasm_bindgen_futures::JsFuture::from(clipboard.write_text(&full_url_clone)).await {
-                            Ok(_) => {
-                                // Success with modern API
-                                web_sys::console::log_1(&"Clipboard copy successful (modern API)".into());
-                            },
-                            Err(_) => {
-                                web_sys::console::log_1(&"Modern clipboard API failed, using fallback".into());
-                                // Fallback to textarea method for Android/older browsers
-                                if let Some(document) = window.document() {
-                                    // Create temporary textarea
-                                    if let Ok(textarea) = document.create_element("textarea") {
-                                        use wasm_bindgen::JsCast;
-                                        if let Ok(textarea) = textarea.dyn_into::<web_sys::HtmlTextAreaElement>() {
-                                            textarea.set_value(&full_url_clone);
+                        match wasm_bindgen_futures::JsFuture::from(clipboard.write_text(&full_url_for_async)).await {
+                            Ok(_) => web_sys::console::log_1(&"Clipboard API worked".into()),
+                            Err(e) => web_sys::console::log_2(&"Clipboard API failed:".into(), &e),
+                        }
+                    });
 
-                                            // Access style through HtmlElement
-                                            let element: &web_sys::HtmlElement = textarea.as_ref();
-                                            let style = element.style();
-                                            style.set_property("position", "fixed").ok();
-                                            style.set_property("opacity", "0").ok();
+                    // ALSO immediately try fallback method (don't wait for async to fail)
+                    // This ensures it works on Android where async clipboard often fails
+                    if let Some(document) = window.document() {
+                        use wasm_bindgen::JsCast;
+                        if let Ok(textarea) = document.create_element("textarea") {
+                            if let Ok(textarea) = textarea.dyn_into::<web_sys::HtmlTextAreaElement>() {
+                                textarea.set_value(&full_url);
 
-                                            if let Some(body) = document.body() {
-                                                body.append_child(&textarea).ok();
-                                                textarea.select();
-                                                textarea.set_selection_range(0, 999999).ok();
+                                // Make it invisible but accessible
+                                let element: &web_sys::HtmlElement = textarea.as_ref();
+                                element.style().set_property("position", "absolute").ok();
+                                element.style().set_property("left", "-9999px").ok();
 
-                                                // Use execCommand via JavaScript for Android compatibility
-                                                // This is deprecated but still the most reliable fallback for Android
-                                                use wasm_bindgen::JsCast;
-                                                let exec_fn = js_sys::eval("(function(cmd) { return document.execCommand(cmd); })").unwrap();
-                                                let exec_fn = exec_fn.dyn_into::<js_sys::Function>().unwrap();
-                                                let copy_result = js_sys::Reflect::apply(
-                                                    &exec_fn,
+                                if let Some(body) = document.body() {
+                                    body.append_child(&textarea).ok();
+                                    textarea.focus().ok();
+                                    textarea.select();
+                                    textarea.set_selection_range(0, 999999).ok();
+
+                                    // Use execCommand - the only reliable method for Android
+                                    match js_sys::eval("(function(cmd) { return document.execCommand(cmd); })") {
+                                        Ok(func) => {
+                                            if let Ok(func) = func.dyn_into::<js_sys::Function>() {
+                                                match js_sys::Reflect::apply(
+                                                    &func,
                                                     &wasm_bindgen::JsValue::NULL,
                                                     &js_sys::Array::of1(&"copy".into())
-                                                );
-
-                                                if copy_result.is_ok() {
-                                                    web_sys::console::log_1(&"Clipboard copy successful (execCommand fallback)".into());
-                                                } else {
-                                                    web_sys::console::log_1(&"Clipboard copy failed (execCommand)".into());
+                                                ) {
+                                                    Ok(result) => {
+                                                        web_sys::console::log_2(&"execCommand result:".into(), &result);
+                                                    },
+                                                    Err(e) => {
+                                                        web_sys::console::log_2(&"execCommand error:".into(), &e);
+                                                    }
                                                 }
-
-                                                body.remove_child(&textarea).ok();
                                             }
+                                        },
+                                        Err(e) => {
+                                            web_sys::console::log_2(&"eval error:".into(), &e);
                                         }
                                     }
+
+                                    body.remove_child(&textarea).ok();
                                 }
                             }
                         }
-                    });
+                    }
 
                     self.copied_video = Some(path.clone());
 
