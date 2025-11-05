@@ -4,7 +4,6 @@ use gloo_net::http::Request;
 use web_sys::HtmlInputElement;
 use gloo_storage::{LocalStorage, Storage};
 use std::collections::HashSet;
-use wasm_bindgen::JsCast;
 use web_sys::window;
 
 // Data structures matching backend JSON
@@ -211,53 +210,48 @@ impl Component for App {
             Msg::CopyVideoLink(url, path) => {
                 // Try to copy to clipboard
                 if let Some(window) = window() {
-                    if let Some(clipboard) = window.navigator().clipboard() {
-                        let full_url = format!("{}{}", window.location().origin().unwrap_or_default(), url);
-                        let promise = clipboard.write_text(&full_url);
+                    let clipboard = window.navigator().clipboard();
+                    let full_url = format!("{}{}", window.location().origin().unwrap_or_default(), url);
+                    let promise = clipboard.write_text(&full_url);
 
-                        // Handle the promise
-                        let path_clone = path.clone();
-                        let link = _ctx.link().clone();
-                        wasm_bindgen_futures::spawn_local(async move {
-                            let _ = wasm_bindgen_futures::JsFuture::from(promise).await;
-                            link.send_message(Msg::ClearCopiedState);
-                        });
+                    // Handle the promise
+                    let path_clone = path.clone();
+                    let link = _ctx.link().clone();
+                    wasm_bindgen_futures::spawn_local(async move {
+                        let _ = wasm_bindgen_futures::JsFuture::from(promise).await;
+                        link.send_message(Msg::ClearCopiedState);
+                    });
 
-                        self.copied_video = Some(path.clone());
+                    self.copied_video = Some(path.clone());
 
-                        // Clear the copied state after 2 seconds
-                        let link = _ctx.link().clone();
-                        wasm_bindgen_futures::spawn_local(async move {
-                            gloo_timers::future::TimeoutFuture::new(2000).await;
-                            link.send_message(Msg::ClearCopiedState);
-                        });
-                    }
+                    // Clear the copied state after 2 seconds
+                    let link = _ctx.link().clone();
+                    wasm_bindgen_futures::spawn_local(async move {
+                        gloo_timers::future::TimeoutFuture::new(2000).await;
+                        link.send_message(Msg::ClearCopiedState);
+                    });
                 }
                 true
             }
             Msg::ShareVideo(url, title) => {
-                // Try to use Web Share API (mobile devices)
+                // Try to use Web Share API (mobile devices) - this will show the Android share menu
                 if let Some(window) = window() {
                     let navigator = window.navigator();
                     let full_url = format!("{}{}", window.location().origin().unwrap_or_default(), url);
 
-                    // Create ShareData
+                    // Create ShareData with proper setter methods
                     let mut share_data = web_sys::ShareData::new();
-                    share_data.title(&title);
-                    share_data.url(&full_url);
+                    share_data.set_title(&title);
+                    share_data.set_url(&full_url);
 
-                    // Call share API using wasm_bindgen
-                    use wasm_bindgen::JsCast;
-                    if let Ok(share_fn) = js_sys::Reflect::get(&navigator, &"share".into()) {
-                        if !share_fn.is_undefined() {
-                            // Call navigator.share(shareData)
-                            let _ = js_sys::Reflect::apply(
-                                &share_fn.dyn_into::<js_sys::Function>().unwrap(),
-                                &navigator,
-                                &js_sys::Array::of1(&share_data)
-                            );
-                        }
-                    }
+                    // Try to use the share API if available
+                    // This will trigger the native Android share menu
+                    let share_result = navigator.share_with_data(&share_data);
+
+                    // Handle the promise (optional - could show error if sharing fails)
+                    wasm_bindgen_futures::spawn_local(async move {
+                        let _ = wasm_bindgen_futures::JsFuture::from(share_result).await;
+                    });
                 }
                 true
             }
