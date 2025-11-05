@@ -3,10 +3,70 @@
 #include <fstream>
 #include <iostream>
 #include <filesystem>
+#include <cstdlib>
+#include <sstream>
+#include <thread>
+#include <mutex>
+#include <map>
 #include "scanner.h"
 
 namespace fs = std::filesystem;
 using json = nlohmann::json;
+
+// HLS cache for generated segments
+struct HLSCache {
+    std::mutex mutex;
+    std::map<std::string, std::string> playlists; // video_path -> m3u8 content
+    std::map<std::string, fs::path> segmentDirs;  // video_path -> segment directory
+};
+
+// Generate HLS segments for a video file
+bool generateHLS(const fs::path& videoPath, const fs::path& outputDir, std::string& playlistContent) {
+    // Create output directory if it doesn't exist
+    if (!fs::exists(outputDir)) {
+        fs::create_directories(outputDir);
+    }
+
+    // Generate HLS segments using ffmpeg
+    fs::path playlistPath = outputDir / "playlist.m3u8";
+    fs::path segmentPattern = outputDir / "segment%d.ts";
+
+    // Build ffmpeg command
+    // -hls_time 4: 4 second segments for fast seeking
+    // -hls_list_size 0: Include all segments in playlist
+    // -hls_flags independent_segments: Enable fast seeking
+    std::ostringstream cmd;
+    cmd << "ffmpeg -i \"" << videoPath.string() << "\" "
+        << "-codec: copy "  // Copy streams without re-encoding for speed
+        << "-start_number 0 "
+        << "-hls_time 4 "
+        << "-hls_list_size 0 "
+        << "-hls_flags independent_segments "
+        << "-f hls "
+        << "\"" << playlistPath.string() << "\" "
+        << "2>&1";  // Redirect stderr to stdout
+
+    std::cout << "Generating HLS for: " << videoPath << std::endl;
+    int result = std::system(cmd.str().c_str());
+
+    if (result != 0 || !fs::exists(playlistPath)) {
+        std::cerr << "Failed to generate HLS segments" << std::endl;
+        return false;
+    }
+
+    // Read generated playlist
+    std::ifstream playlistFile(playlistPath);
+    if (!playlistFile) {
+        return false;
+    }
+
+    std::stringstream buffer;
+    buffer << playlistFile.rdbuf();
+    playlistContent = buffer.str();
+
+    std::cout << "HLS generation complete: " << playlistPath << std::endl;
+    return true;
+}
 
 // Profile structure
 struct Profile {
@@ -112,6 +172,15 @@ int main(int argc, char** argv) {
 
     std::cout << "Found " << library.series.size() << " series and "
               << library.movies.size() << " movies" << std::endl;
+
+    // Create HLS cache
+    HLSCache hlsCache;
+
+    // Create HLS cache directory
+    fs::path hlsCacheDir = fs::temp_directory_path() / "media_server_hls";
+    if (!fs::exists(hlsCacheDir)) {
+        fs::create_directories(hlsCacheDir);
+    }
 
     // Create HTTP server
     httplib::Server server;
@@ -253,6 +322,99 @@ int main(int argc, char** argv) {
             file.read(buffer.data(), fileSize);
             res.set_content(buffer.data(), fileSize, contentType);
         }
+    });
+
+    // HLS playlist endpoint
+    server.Get(R"(/hls/(.+)/playlist\.m3u8)", [&libPath, &hlsCache, &hlsCacheDir](const httplib::Request& req, httplib::Response& res) {
+        std::string videoPath = httplib::detail::decode_url(req.matches[1].str(), false);
+
+        // Security: prevent directory traversal
+        if (videoPath.find("..") != std::string::npos) {
+            res.status = 403;
+            res.set_content("Forbidden", "text/plain");
+            return;
+        }
+
+        fs::path fullPath = libPath / videoPath;
+
+        if (!fs::exists(fullPath) || !fs::is_regular_file(fullPath)) {
+            res.status = 404;
+            res.set_content("Video not found", "text/plain");
+            return;
+        }
+
+        // Check cache first
+        std::lock_guard<std::mutex> lock(hlsCache.mutex);
+
+        if (hlsCache.playlists.find(videoPath) == hlsCache.playlists.end()) {
+            // Generate HLS segments
+            fs::path segmentDir = hlsCacheDir / std::to_string(std::hash<std::string>{}(videoPath));
+            std::string playlistContent;
+
+            if (!generateHLS(fullPath, segmentDir, playlistContent)) {
+                res.status = 500;
+                res.set_content("Failed to generate HLS stream", "text/plain");
+                return;
+            }
+
+            // Cache the playlist and segment directory
+            hlsCache.playlists[videoPath] = playlistContent;
+            hlsCache.segmentDirs[videoPath] = segmentDir;
+        }
+
+        // Serve cached playlist
+        res.set_header("Content-Type", "application/vnd.apple.mpegurl");
+        res.set_header("Cache-Control", "no-cache");
+        res.set_content(hlsCache.playlists[videoPath], "application/vnd.apple.mpegurl");
+    });
+
+    // HLS segment endpoint
+    server.Get(R"(/hls/(.+)/(segment\d+\.ts))", [&hlsCache](const httplib::Request& req, httplib::Response& res) {
+        std::string videoPath = httplib::detail::decode_url(req.matches[1].str(), false);
+        std::string segmentName = req.matches[2].str();
+
+        // Security: prevent directory traversal
+        if (videoPath.find("..") != std::string::npos || segmentName.find("..") != std::string::npos) {
+            res.status = 403;
+            res.set_content("Forbidden", "text/plain");
+            return;
+        }
+
+        std::lock_guard<std::mutex> lock(hlsCache.mutex);
+
+        // Check if we have segments for this video
+        if (hlsCache.segmentDirs.find(videoPath) == hlsCache.segmentDirs.end()) {
+            res.status = 404;
+            res.set_content("Segments not found", "text/plain");
+            return;
+        }
+
+        fs::path segmentPath = hlsCache.segmentDirs[videoPath] / segmentName;
+
+        if (!fs::exists(segmentPath) || !fs::is_regular_file(segmentPath)) {
+            res.status = 404;
+            res.set_content("Segment not found", "text/plain");
+            return;
+        }
+
+        // Serve segment file
+        std::ifstream file(segmentPath, std::ios::binary);
+        if (!file) {
+            res.status = 500;
+            res.set_content("Error reading segment", "text/plain");
+            return;
+        }
+
+        file.seekg(0, std::ios::end);
+        size_t fileSize = file.tellg();
+        file.seekg(0, std::ios::beg);
+
+        std::vector<char> buffer(fileSize);
+        file.read(buffer.data(), fileSize);
+
+        res.set_header("Content-Type", "video/MP2T");
+        res.set_header("Cache-Control", "max-age=31536000"); // Cache segments for 1 year
+        res.set_content(buffer.data(), fileSize, "video/MP2T");
     });
 
     // Serve frontend WASM files
