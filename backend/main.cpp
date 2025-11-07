@@ -28,7 +28,7 @@ struct LegacyCache {
 };
 
 // Generate HLS segments for a video file with smart transcoding
-bool generateHLS(const fs::path& videoPath, const fs::path& outputDir, std::string& playlistContent, bool useStreamCopy = false) {
+bool generateHLS(const fs::path& videoPath, const fs::path& outputDir, std::string& playlistContent, bool copyVideo = false, bool copyAudio = false, int audioStream = -1, int subtitleStream = -1) {
     // Create output directory if it doesn't exist
     if (!fs::exists(outputDir)) {
         fs::create_directories(outputDir);
@@ -41,52 +41,53 @@ bool generateHLS(const fs::path& videoPath, const fs::path& outputDir, std::stri
     std::ostringstream cmd;
     cmd << "ffmpeg -i \"" << videoPath.string() << "\" ";
 
-    if (useStreamCopy) {
-        // STREAM COPY MODE: No re-encoding, preserve original quality
-        // This works when the source is already H.264/H.265 + AAC/MP3
-        // We need to force keyframes at segment boundaries for seeking
-        std::cout << "Using stream copy (no re-encoding) for: " << videoPath << std::endl;
-
-        cmd << "-c:v copy "              // Copy video stream without re-encoding
-            << "-c:a copy "              // Copy audio stream without re-encoding
-            << "-start_number 0 "
-            << "-hls_time 4 "            // 4 second segments
-            << "-hls_list_size 0 "       // Include all segments
-            << "-hls_flags independent_segments+split_by_time " // Try to split at keyframes
-            << "-hls_segment_type mpegts "
-            << "-f hls ";
-    } else {
-        // TRANSCODE MODE: Re-encode for compatibility
-        // Build ffmpeg command for HLS with proper seeking support
-        // Key settings for smooth playback and seeking:
-        // -c:v libx264: Re-encode video to ensure keyframes (required for seeking)
-        // -g 48: Keyframe every 48 frames (2 seconds at 24fps, 1.6s at 30fps)
-        // -sc_threshold 0: Disable scene change detection to keep regular keyframes
-        // -c:a aac: Re-encode audio to AAC (HLS standard)
-        // -hls_time 4: 4 second segments (2 keyframes per segment for smooth seeking)
-        // -hls_list_size 0: Include all segments in playlist
-        // -hls_flags independent_segments+split_by_time: Enable accurate seeking
-        // -preset veryfast: Fast encoding without too much quality loss
-        // -crf 23: Quality level (18-28 range, 23 is balanced)
-        std::cout << "Transcoding to H.264/AAC for: " << videoPath << std::endl;
-
-        cmd << "-c:v libx264 "           // H.264 video codec for compatibility
-            << "-preset veryfast "       // Fast encoding
-            << "-crf 23 "                // Constant quality (lower = better, 18-28 range)
-            << "-g 48 "                  // Keyframe interval (2 seconds for 24fps)
-            << "-sc_threshold 0 "        // Disable scene detection for regular keyframes
-            << "-c:a aac "               // AAC audio for HLS compatibility
-            << "-b:a 128k "              // Audio bitrate
-            << "-start_number 0 "
-            << "-hls_time 4 "
-            << "-hls_list_size 0 "
-            << "-hls_flags independent_segments+split_by_time "
-            << "-hls_segment_type mpegts "
-            << "-f hls ";
+    // Select specific audio stream if specified (prioritize English)
+    if (audioStream >= 0) {
+        cmd << "-map 0:v:0 ";  // Map first video stream
+        cmd << "-map 0:a:" << audioStream << " ";  // Map specific audio stream
     }
 
-    cmd << "\"" << playlistPath.string() << "\" 2>&1";  // Redirect stderr to stdout
+    // Video codec selection
+    if (copyVideo) {
+        std::cout << "✓ Using stream copy for VIDEO (zero quality loss, instant!)" << std::endl;
+        cmd << "-c:v copy ";  // Copy video without re-encoding
+    } else {
+        std::cout << "Transcoding VIDEO to H.264..." << std::endl;
+        cmd << "-c:v libx264 "
+            << "-preset veryfast "
+            << "-crf 23 "
+            << "-g 48 "
+            << "-sc_threshold 0 ";
+    }
 
+    // Audio codec selection
+    if (copyAudio) {
+        std::cout << "✓ Using stream copy for AUDIO (zero quality loss)" << std::endl;
+        cmd << "-c:a copy ";  // Copy audio without re-encoding
+    } else {
+        std::cout << "Transcoding AUDIO to AAC..." << std::endl;
+        cmd << "-c:a aac "
+            << "-b:a 128k ";
+    }
+
+    // HLS-specific settings
+    cmd << "-start_number 0 "
+        << "-hls_time 4 "
+        << "-hls_list_size 0 "
+        << "-hls_flags split_by_time "
+        << "-hls_segment_type mpegts "
+        << "-hls_segment_filename \"" << segmentPattern.string() << "\" "
+        << "-f hls ";
+
+    // Add subtitle if specified
+    if (subtitleStream >= 0) {
+        cmd << "-map 0:s:" << subtitleStream << " "
+            << "-c:s webvtt ";
+    }
+
+    cmd << "\"" << playlistPath.string() << "\" 2>&1";
+
+    std::cout << "[HLS] Command: " << cmd.str() << std::endl;
     int result = std::system(cmd.str().c_str());
 
     if (result != 0 || !fs::exists(playlistPath)) {
@@ -509,20 +510,38 @@ int main(int argc, char** argv) {
         if (hlsCache.playlists.find(videoPath) == hlsCache.playlists.end()) {
             std::cout << "[HLS] Not in cache, generating HLS stream..." << std::endl;
 
-            // Analyze video to determine if we can use stream copy
+            // Analyze video to determine smart transcoding strategy
             auto videoInfo = VideoInfoAnalyzer::analyze(fullPath.string());
-            bool useStreamCopy = false;
 
-            if (videoInfo && videoInfo->is_hls_compatible) {
-                std::cout << "[HLS] ✓ Video is HLS compatible!" << std::endl;
-                std::cout << "[HLS] ✓ Using STREAM COPY (zero quality loss!)" << std::endl;
-                useStreamCopy = true;
-            } else {
-                std::cout << "[HLS] ✗ Video requires transcoding for HLS" << std::endl;
-                if (videoInfo) {
-                    std::cout << "[HLS]   Needs video transcode: " << (videoInfo->needs_video_transcode ? "yes" : "no") << std::endl;
-                    std::cout << "[HLS]   Needs audio transcode: " << (videoInfo->needs_audio_transcode ? "yes" : "no") << std::endl;
+            bool copyVideo = false;
+            bool copyAudio = false;
+            int audioStreamIndex = -1;
+            int subtitleStreamIndex = -1;
+
+            if (videoInfo) {
+                // Selective stream copy for ZERO quality degradation
+                copyVideo = !videoInfo->needs_video_transcode;
+                copyAudio = !videoInfo->needs_audio_transcode;
+
+                std::cout << "[HLS] Smart transcoding strategy:" << std::endl;
+                std::cout << "[HLS]   Video: " << (copyVideo ? "✓ COPY (zero quality loss)" : "✗ Transcode to H.264") << std::endl;
+                std::cout << "[HLS]   Audio: " << (copyAudio ? "✓ COPY (zero quality loss)" : "✗ Transcode to AAC") << std::endl;
+
+                // Find English audio stream (prioritize English over other languages)
+                for (size_t i = 0; i < videoInfo->audio_streams.size(); i++) {
+                    // Check stream metadata for language (this would need to be added to VideoCodecInfo)
+                    // For now, prefer stream 1 (often English in multi-audio files) if there are multiple streams
+                    if (videoInfo->audio_streams.size() > 1 && i == 1) {
+                        audioStreamIndex = i;
+                        std::cout << "[HLS]   Selected audio stream: " << i << " (likely English)" << std::endl;
+                        break;
+                    }
                 }
+
+                // Find English subtitle stream if available
+                // (Subtitle selection logic would go here if we add subtitle metadata)
+            } else {
+                std::cerr << "[HLS] WARNING: Could not analyze video, using full transcode" << std::endl;
             }
 
             // Generate HLS segments
@@ -530,7 +549,7 @@ int main(int argc, char** argv) {
             std::string playlistContent;
 
             std::cout << "[HLS] Starting HLS generation..." << std::endl;
-            if (!generateHLS(fullPath, segmentDir, playlistContent, useStreamCopy)) {
+            if (!generateHLS(fullPath, segmentDir, playlistContent, copyVideo, copyAudio, audioStreamIndex, subtitleStreamIndex)) {
                 std::cerr << "[HLS] ERROR: Failed to generate HLS stream" << std::endl;
                 res.status = 500;
                 res.set_content("Failed to generate HLS stream", "text/plain");
