@@ -4,18 +4,33 @@ import type { VideoFileInfo } from '$lib/types';
  * Fetch video codec and format information from the backend
  */
 export async function fetchVideoInfo(videoPath: string): Promise<VideoFileInfo | null> {
+  const url = `/api/video/info/${encodeURIComponent(videoPath)}`;
+  console.log('[API] Fetching video info:', url);
+
   try {
-    const response = await fetch(`/api/video/info/${encodeURIComponent(videoPath)}`);
+    const response = await fetch(url);
+
+    console.log('[API] Response status:', response.status, response.statusText);
 
     if (!response.ok) {
-      console.error('Failed to fetch video info:', response.statusText);
+      const errorText = await response.text();
+      console.error('[API] Failed to fetch video info:', {
+        status: response.status,
+        statusText: response.statusText,
+        body: errorText
+      });
       return null;
     }
 
     const data: VideoFileInfo = await response.json();
+    console.log('[API] Video info fetched successfully:', {
+      videoStreams: data.video_streams.length,
+      audioStreams: data.audio_streams.length,
+      playbackModes: data.playback_modes.length
+    });
     return data;
   } catch (error) {
-    console.error('Error fetching video info:', error);
+    console.error('[API] Error fetching video info:', error);
     return null;
   }
 }
