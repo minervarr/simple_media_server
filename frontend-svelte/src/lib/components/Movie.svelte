@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { videoPlayer } from '$lib/stores/videoPlayerStore';
   import { watchedVideos } from '$lib/stores/profileStore';
   import type { Movie as MovieType } from '$lib/types';
 
@@ -7,37 +8,32 @@
   $: isWatched = $watchedVideos.has(movie.path);
   $: videoUrl = `/video/${movie.path}`;
 
-  function handleToggleWatched(event: MouseEvent) {
+  function handlePlay() {
+    videoPlayer.play(movie.path, movie.name);
+    watchedVideos.markAsWatched(movie.path);
+  }
+
+  function handleToggleWatched(event: MouseEvent | KeyboardEvent) {
     event.preventDefault();
     event.stopPropagation();
     watchedVideos.toggle(movie.path);
   }
-
-  function handleLinkClick() {
-    // Mark as watched when link is clicked
-    watchedVideos.markAsWatched(movie.path);
-  }
 </script>
 
 <div class="movie" class:watched={isWatched}>
-  <a
-    href={videoUrl}
-    class="movie-link"
-    on:click={handleLinkClick}
-    target="_blank"
-    rel="noopener noreferrer"
-  >
-    <div class="movie-name">{movie.name}</div>
-  </a>
+  <button class="movie-title" on:click={handlePlay}>
+    {movie.name}
+  </button>
+
   <div class="movie-actions">
     <a
       href={videoUrl}
-      class="play-link"
-      on:click={handleLinkClick}
+      class="share-link"
       target="_blank"
       rel="noopener noreferrer"
+      on:click={(e) => e.stopPropagation()}
     >
-      Play
+      share link
     </a>
     <div
       class="watched-indicator"
@@ -60,45 +56,49 @@
     background-color: var(--color-bg-secondary);
     border: 1px solid var(--color-border-primary);
     border-radius: var(--radius-md);
-    padding: var(--spacing-xl) var(--spacing-lg);
-    text-align: center;
+    padding: var(--spacing-xl);
     transition: all var(--transition-fast);
-    position: relative;
+    gap: var(--spacing-md);
 
     &:hover {
       background-color: var(--color-bg-tertiary);
       border-color: var(--color-border-secondary);
       transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
     }
 
     &.watched {
-      opacity: 0.6;
+      opacity: 0.55;
 
-      .movie-name {
+      .movie-title {
         text-decoration: line-through;
         text-decoration-color: var(--color-text-subtle);
       }
     }
   }
 
-  .movie-link {
-    text-decoration: none;
-    color: inherit;
-    display: block;
-    margin-bottom: var(--spacing-md);
-    transition: color var(--transition-fast);
-
-    &:hover {
-      color: var(--color-accent-success);
-    }
-  }
-
-  .movie-name {
+  .movie-title {
+    background: none;
+    border: none;
     font-size: var(--font-size-md);
     line-height: 1.4;
     color: var(--color-text-primary);
     word-wrap: break-word;
+    text-align: center;
+    cursor: pointer;
+    padding: var(--spacing-sm) 0;
     transition: color var(--transition-fast);
+    font-family: inherit;
+    font-weight: var(--font-weight-medium);
+    flex: 1;
+
+    &:hover {
+      color: var(--color-accent-success);
+    }
+
+    &:active {
+      color: var(--color-accent-success-bright);
+    }
   }
 
   .movie-actions {
@@ -106,25 +106,22 @@
     justify-content: center;
     align-items: center;
     gap: var(--spacing-lg);
-    margin-top: auto;
+    padding-top: var(--spacing-sm);
+    border-top: 1px solid var(--color-border-primary);
   }
 
-  .play-link {
-    font-size: var(--font-size-base);
-    color: var(--color-accent-success);
+  .share-link {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-disabled);
     text-decoration: none;
-    padding: var(--spacing-sm) var(--spacing-xl);
+    padding: var(--spacing-xs) var(--spacing-md);
     border-radius: var(--radius-sm);
     transition: all var(--transition-fast);
-    font-weight: var(--font-weight-medium);
 
     &:hover {
-      background-color: var(--color-accent-success-bg);
-      color: var(--color-accent-success-bright);
-    }
-
-    &:active {
-      transform: scale(0.95);
+      color: var(--color-text-primary);
+      background-color: var(--color-bg-hover);
+      text-decoration: underline;
     }
   }
 
@@ -133,7 +130,7 @@
     cursor: pointer;
     padding: var(--spacing-sm);
     color: var(--color-text-disabled);
-    transition: color var(--transition-fast);
+    transition: all var(--transition-fast);
     user-select: none;
     min-width: 2.5rem;
     min-height: 2.5rem;
@@ -152,6 +149,7 @@
 
       &:hover {
         color: var(--color-text-disabled);
+        background-color: var(--color-bg-hover);
       }
     }
   }
@@ -162,13 +160,13 @@
       padding: var(--spacing-lg);
     }
 
-    .movie-name {
+    .movie-title {
       font-size: var(--font-size-base);
     }
 
-    .play-link {
-      padding: var(--spacing-sm) var(--spacing-lg);
+    .share-link {
       font-size: var(--font-size-sm);
+      padding: var(--spacing-sm) var(--spacing-lg);
     }
 
     .watched-indicator {
