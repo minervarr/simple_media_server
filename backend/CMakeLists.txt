@@ -27,6 +27,7 @@ FetchContent_MakeAvailable(httplib json)
 add_executable(media_server
     main.cpp
     scanner.cpp
+    video_info.cpp
 )
 
 # Include directories
