@@ -31,6 +31,52 @@ static std::string executeCommand(const std::string& command) {
     return result;
 }
 
+// Helper functions to safely extract numeric values that may be strings or numbers
+static int safeGetInt(const json& j, const std::string& key, int defaultValue = 0) {
+    if (!j.contains(key)) return defaultValue;
+
+    if (j[key].is_number_integer()) {
+        return j[key].get<int>();
+    } else if (j[key].is_string()) {
+        try {
+            return std::stoi(j[key].get<std::string>());
+        } catch (...) {
+            return defaultValue;
+        }
+    }
+    return defaultValue;
+}
+
+static int64_t safeGetInt64(const json& j, const std::string& key, int64_t defaultValue = 0) {
+    if (!j.contains(key)) return defaultValue;
+
+    if (j[key].is_number_integer()) {
+        return j[key].get<int64_t>();
+    } else if (j[key].is_string()) {
+        try {
+            return std::stoll(j[key].get<std::string>());
+        } catch (...) {
+            return defaultValue;
+        }
+    }
+    return defaultValue;
+}
+
+static double safeGetDouble(const json& j, const std::string& key, double defaultValue = 0.0) {
+    if (!j.contains(key)) return defaultValue;
+
+    if (j[key].is_number()) {
+        return j[key].get<double>();
+    } else if (j[key].is_string()) {
+        try {
+            return std::stod(j[key].get<std::string>());
+        } catch (...) {
+            return defaultValue;
+        }
+    }
+    return defaultValue;
+}
+
 json VideoFileInfo::toJson() const {
     json j;
 
@@ -158,9 +204,9 @@ std::optional<VideoFileInfo> VideoInfoAnalyzer::parseFFProbeOutput(const std::st
             auto& fmt = data["format"];
             info.format.format_name = fmt.value("format_name", "");
             info.format.format_long_name = fmt.value("format_long_name", "");
-            info.format.duration = std::stod(fmt.value("duration", "0"));
-            info.format.size = std::stoll(fmt.value("size", "0"));
-            info.format.bitrate = std::stoll(fmt.value("bit_rate", "0"));
+            info.format.duration = safeGetDouble(fmt, "duration", 0.0);
+            info.format.size = safeGetInt64(fmt, "size", 0);
+            info.format.bitrate = safeGetInt64(fmt, "bit_rate", 0);
         }
 
         // Parse streams
@@ -173,10 +219,10 @@ std::optional<VideoFileInfo> VideoInfoAnalyzer::parseFFProbeOutput(const std::st
                     video.codec_name = stream.value("codec_name", "");
                     video.codec_long_name = stream.value("codec_long_name", "");
                     video.profile = stream.value("profile", "");
-                    video.width = stream.value("width", 0);
-                    video.height = stream.value("height", 0);
+                    video.width = safeGetInt(stream, "width", 0);
+                    video.height = safeGetInt(stream, "height", 0);
                     video.pix_fmt = stream.value("pix_fmt", "");
-                    video.bitrate = std::stoll(stream.value("bit_rate", "0"));
+                    video.bitrate = safeGetInt64(stream, "bit_rate", 0);
 
                     // Parse FPS
                     std::string r_frame_rate = stream.value("r_frame_rate", "0/1");
@@ -194,7 +240,7 @@ std::optional<VideoFileInfo> VideoInfoAnalyzer::parseFFProbeOutput(const std::st
 
                     // Bit depth
                     if (stream.contains("bits_per_raw_sample")) {
-                        video.bit_depth = stream.value("bits_per_raw_sample", 8);
+                        video.bit_depth = safeGetInt(stream, "bits_per_raw_sample", 8);
                     } else {
                         // Try to infer from pix_fmt
                         if (video.pix_fmt.find("10") != std::string::npos) {
@@ -210,11 +256,11 @@ std::optional<VideoFileInfo> VideoInfoAnalyzer::parseFFProbeOutput(const std::st
                     AudioCodecInfo audio;
                     audio.codec_name = stream.value("codec_name", "");
                     audio.codec_long_name = stream.value("codec_long_name", "");
-                    audio.sample_rate = stream.value("sample_rate", 0);
-                    audio.channels = stream.value("channels", 0);
+                    audio.sample_rate = safeGetInt(stream, "sample_rate", 0);
+                    audio.channels = safeGetInt(stream, "channels", 0);
                     audio.channel_layout = stream.value("channel_layout", "");
-                    audio.bitrate = std::stoll(stream.value("bit_rate", "0"));
-                    audio.bit_depth = stream.value("bits_per_sample", 0);
+                    audio.bitrate = safeGetInt64(stream, "bit_rate", 0);
+                    audio.bit_depth = safeGetInt(stream, "bits_per_sample", 0);
 
                     info.audio_streams.push_back(audio);
 
