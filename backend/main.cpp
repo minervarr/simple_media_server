@@ -31,17 +31,31 @@ bool generateHLS(const fs::path& videoPath, const fs::path& outputDir, std::stri
     fs::path playlistPath = outputDir / "playlist.m3u8";
     fs::path segmentPattern = outputDir / "segment%d.ts";
 
-    // Build ffmpeg command
-    // -hls_time 4: 4 second segments for fast seeking
+    // Build ffmpeg command for HLS with proper seeking support
+    // Key settings for smooth playback and seeking:
+    // -c:v libx264: Re-encode video to ensure keyframes (required for seeking)
+    // -g 48: Keyframe every 48 frames (2 seconds at 24fps, 1.6s at 30fps)
+    // -sc_threshold 0: Disable scene change detection to keep regular keyframes
+    // -c:a aac: Re-encode audio to AAC (HLS standard)
+    // -hls_time 4: 4 second segments (2 keyframes per segment for smooth seeking)
     // -hls_list_size 0: Include all segments in playlist
-    // -hls_flags independent_segments: Enable fast seeking
+    // -hls_flags independent_segments+split_by_time: Enable accurate seeking
+    // -preset veryfast: Fast encoding without too much quality loss
+    // -crf 23: Quality level (18-28 range, 23 is balanced)
     std::ostringstream cmd;
     cmd << "ffmpeg -i \"" << videoPath.string() << "\" "
-        << "-codec: copy "  // Copy streams without re-encoding for speed
+        << "-c:v libx264 "           // H.264 video codec for compatibility
+        << "-preset veryfast "        // Fast encoding
+        << "-crf 23 "                 // Constant quality (lower = better, 18-28 range)
+        << "-g 48 "                   // Keyframe interval (2 seconds for 24fps)
+        << "-sc_threshold 0 "         // Disable scene detection for regular keyframes
+        << "-c:a aac "                // AAC audio for HLS compatibility
+        << "-b:a 128k "               // Audio bitrate
         << "-start_number 0 "
         << "-hls_time 4 "
         << "-hls_list_size 0 "
-        << "-hls_flags independent_segments "
+        << "-hls_flags independent_segments+split_by_time "
+        << "-hls_segment_type mpegts "
         << "-f hls "
         << "\"" << playlistPath.string() << "\" "
         << "2>&1";  // Redirect stderr to stdout
