@@ -22,27 +22,32 @@ export async function fetchVideoInfo(videoPath: string): Promise<VideoFileInfo |
 
 /**
  * Get video URL for a specific playback mode
+ * Note: Paths are NOT encoded here because the browser's fetch API and video element
+ * handle encoding automatically for URLs. The backend decodes them properly.
  */
 export function getVideoUrl(videoPath: string, mode: string): string {
+  // Encode each path segment separately to handle special characters
+  const encodedPath = videoPath.split('/').map(segment => encodeURIComponent(segment)).join('/');
+
   switch (mode) {
     case 'original':
       // Direct original file streaming
-      return `/video/${videoPath}`;
+      return `/video/${encodedPath}`;
 
     case 'hls':
       // HLS streaming (with smart transcoding)
-      return `/hls/${videoPath}/playlist.m3u8`;
+      return `/hls/${encodedPath}/playlist.m3u8`;
 
     case 'legacy':
       // Legacy-compatible MP4 (H.264 Baseline + AAC)
-      return `/legacy/${videoPath}`;
+      return `/legacy/${encodedPath}`;
 
     case 'download':
       // Direct download link
-      return `/video/${videoPath}`;
+      return `/video/${encodedPath}`;
 
     default:
       // Default to HLS
-      return `/hls/${videoPath}/playlist.m3u8`;
+      return `/hls/${encodedPath}/playlist.m3u8`;
   }
 }

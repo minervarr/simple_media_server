@@ -129,8 +129,9 @@
   }
 
   function getCodecBadgeColor(mode: PlaybackMode): string {
-    if (!mode.requires_transcoding) return 'var(--color-success)';
-    return 'var(--color-warning)';
+    // Green for direct/no transcoding, orange for transcoding required
+    if (!mode.requires_transcoding) return '#22c55e'; // Green
+    return '#f59e0b'; // Orange/amber
   }
 
   function formatFileSize(bytes: number): string {
