@@ -6,6 +6,7 @@
 #include <memory>
 #include <cstring>
 #include <algorithm>
+#include <chrono>
 
 // Execute command and capture output
 static std::string executeCommand(const std::string& command) {
@@ -107,19 +108,44 @@ json VideoFileInfo::toJson() const {
 }
 
 std::optional<VideoFileInfo> VideoInfoAnalyzer::analyze(const std::string& videoPath) {
-    // Build ffprobe command to get JSON output
+    std::cout << "[VideoInfo] Analyzing video: " << videoPath << std::endl;
+
+    // Build ffprobe command to get JSON output with timeout
     std::ostringstream cmd;
-    cmd << "ffprobe -v quiet -print_format json -show_format -show_streams "
+    cmd << "timeout 10 ffprobe -v quiet -print_format json -show_format -show_streams "
         << "\"" << videoPath << "\" 2>&1";
+
+    std::cout << "[VideoInfo] Running ffprobe..." << std::endl;
+    auto startTime = std::chrono::steady_clock::now();
 
     std::string output = executeCommand(cmd.str());
 
+    auto endTime = std::chrono::steady_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+    std::cout << "[VideoInfo] ffprobe completed in " << duration.count() << "ms" << std::endl;
+
     if (output.empty()) {
-        std::cerr << "Failed to get ffprobe output for: " << videoPath << std::endl;
+        std::cerr << "[VideoInfo] ERROR: Failed to get ffprobe output for: " << videoPath << std::endl;
         return std::nullopt;
     }
 
-    return parseFFProbeOutput(output);
+    std::cout << "[VideoInfo] ffprobe output size: " << output.size() << " bytes" << std::endl;
+
+    auto result = parseFFProbeOutput(output);
+    if (result) {
+        std::cout << "[VideoInfo] Successfully parsed video info:" << std::endl;
+        std::cout << "  - Video streams: " << result->video_streams.size() << std::endl;
+        std::cout << "  - Audio streams: " << result->audio_streams.size() << std::endl;
+        std::cout << "  - Playback modes: " << result->available_modes.size() << std::endl;
+        if (!result->video_streams.empty()) {
+            std::cout << "  - Codec: " << result->video_streams[0].codec_name
+                     << " " << result->video_streams[0].width << "x" << result->video_streams[0].height << std::endl;
+        }
+    } else {
+        std::cerr << "[VideoInfo] ERROR: Failed to parse ffprobe output" << std::endl;
+    }
+
+    return result;
 }
 
 std::optional<VideoFileInfo> VideoInfoAnalyzer::parseFFProbeOutput(const std::string& jsonOutput) {

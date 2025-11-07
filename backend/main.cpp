@@ -312,40 +312,63 @@ int main(int argc, char** argv) {
 
     // API endpoint: Get video codec/format information
     server.Get("/api/video/info/.*", [&libPath](const httplib::Request& req, httplib::Response& res) {
+        std::cout << "\n[API] ===== Video Info Request =====" << std::endl;
+        std::cout << "[API] Full URL: " << req.path << std::endl;
+
         // Extract video path from URL
         std::string videoPath = req.path.substr(16); // Remove "/api/video/info/"
+        std::cout << "[API] Extracted path: " << videoPath << std::endl;
 
         // Decode URL-encoded path
         videoPath = httplib::detail::decode_url(videoPath, false);
+        std::cout << "[API] Decoded path: " << videoPath << std::endl;
 
         // Security: prevent directory traversal
         if (videoPath.find("..") != std::string::npos) {
+            std::cerr << "[API] ERROR: Directory traversal attempt blocked" << std::endl;
             res.status = 403;
             res.set_content("{\"error\": \"Forbidden\"}", "application/json");
             return;
         }
 
         fs::path fullPath = libPath / videoPath;
+        std::cout << "[API] Full file path: " << fullPath << std::endl;
 
-        if (!fs::exists(fullPath) || !fs::is_regular_file(fullPath)) {
+        if (!fs::exists(fullPath)) {
+            std::cerr << "[API] ERROR: File does not exist" << std::endl;
             res.status = 404;
             res.set_content("{\"error\": \"Video not found\"}", "application/json");
             return;
         }
 
+        if (!fs::is_regular_file(fullPath)) {
+            std::cerr << "[API] ERROR: Path is not a regular file" << std::endl;
+            res.status = 404;
+            res.set_content("{\"error\": \"Not a regular file\"}", "application/json");
+            return;
+        }
+
+        std::cout << "[API] File exists, analyzing..." << std::endl;
+
         // Analyze video file
         auto videoInfo = VideoInfoAnalyzer::analyze(fullPath.string());
 
         if (!videoInfo) {
+            std::cerr << "[API] ERROR: Failed to analyze video file" << std::endl;
             res.status = 500;
-            res.set_content("{\"error\": \"Failed to analyze video file\"}", "application/json");
+            res.set_content("{\"error\": \"Failed to analyze video file. Check if ffprobe is installed.\"}", "application/json");
             return;
         }
+
+        std::cout << "[API] Analysis successful, sending response" << std::endl;
 
         // Return video info as JSON
         json response = videoInfo->toJson();
         response["file_path"] = videoPath;
         res.set_content(response.dump(), "application/json");
+
+        std::cout << "[API] Response sent successfully" << std::endl;
+        std::cout << "[API] ================================\n" << std::endl;
     });
 
     // Serve video files with range request support
@@ -458,18 +481,23 @@ int main(int argc, char** argv) {
 
     // HLS playlist endpoint with smart transcoding
     server.Get(R"(/hls/(.+)/playlist\.m3u8)", [&libPath, &hlsCache, &hlsCacheDir](const httplib::Request& req, httplib::Response& res) {
+        std::cout << "\n[HLS] ===== HLS Playlist Request =====" << std::endl;
         std::string videoPath = httplib::detail::decode_url(req.matches[1].str(), false);
+        std::cout << "[HLS] Video path: " << videoPath << std::endl;
 
         // Security: prevent directory traversal
         if (videoPath.find("..") != std::string::npos) {
+            std::cerr << "[HLS] ERROR: Directory traversal attempt blocked" << std::endl;
             res.status = 403;
             res.set_content("Forbidden", "text/plain");
             return;
         }
 
         fs::path fullPath = libPath / videoPath;
+        std::cout << "[HLS] Full path: " << fullPath << std::endl;
 
         if (!fs::exists(fullPath) || !fs::is_regular_file(fullPath)) {
+            std::cerr << "[HLS] ERROR: Video not found" << std::endl;
             res.status = 404;
             res.set_content("Video not found", "text/plain");
             return;
@@ -479,36 +507,52 @@ int main(int argc, char** argv) {
         std::lock_guard<std::mutex> lock(hlsCache.mutex);
 
         if (hlsCache.playlists.find(videoPath) == hlsCache.playlists.end()) {
+            std::cout << "[HLS] Not in cache, generating HLS stream..." << std::endl;
+
             // Analyze video to determine if we can use stream copy
             auto videoInfo = VideoInfoAnalyzer::analyze(fullPath.string());
             bool useStreamCopy = false;
 
             if (videoInfo && videoInfo->is_hls_compatible) {
-                std::cout << "Video is HLS compatible, using stream copy (no transcoding)" << std::endl;
+                std::cout << "[HLS] ✓ Video is HLS compatible!" << std::endl;
+                std::cout << "[HLS] ✓ Using STREAM COPY (zero quality loss!)" << std::endl;
                 useStreamCopy = true;
             } else {
-                std::cout << "Video requires transcoding for HLS compatibility" << std::endl;
+                std::cout << "[HLS] ✗ Video requires transcoding for HLS" << std::endl;
+                if (videoInfo) {
+                    std::cout << "[HLS]   Needs video transcode: " << (videoInfo->needs_video_transcode ? "yes" : "no") << std::endl;
+                    std::cout << "[HLS]   Needs audio transcode: " << (videoInfo->needs_audio_transcode ? "yes" : "no") << std::endl;
+                }
             }
 
             // Generate HLS segments
             fs::path segmentDir = hlsCacheDir / std::to_string(std::hash<std::string>{}(videoPath));
             std::string playlistContent;
 
+            std::cout << "[HLS] Starting HLS generation..." << std::endl;
             if (!generateHLS(fullPath, segmentDir, playlistContent, useStreamCopy)) {
+                std::cerr << "[HLS] ERROR: Failed to generate HLS stream" << std::endl;
                 res.status = 500;
                 res.set_content("Failed to generate HLS stream", "text/plain");
                 return;
             }
 
+            std::cout << "[HLS] HLS generation complete!" << std::endl;
+
             // Cache the playlist and segment directory
             hlsCache.playlists[videoPath] = playlistContent;
             hlsCache.segmentDirs[videoPath] = segmentDir;
+        } else {
+            std::cout << "[HLS] Serving from cache" << std::endl;
         }
 
         // Serve cached playlist
         res.set_header("Content-Type", "application/vnd.apple.mpegurl");
         res.set_header("Cache-Control", "no-cache");
         res.set_content(hlsCache.playlists[videoPath], "application/vnd.apple.mpegurl");
+
+        std::cout << "[HLS] Playlist served successfully" << std::endl;
+        std::cout << "[HLS] ================================\n" << std::endl;
     });
 
     // HLS segment endpoint
