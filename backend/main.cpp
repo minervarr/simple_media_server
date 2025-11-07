@@ -417,8 +417,8 @@ int main(int argc, char** argv) {
         res.set_content(buffer.data(), fileSize, "video/MP2T");
     });
 
-    // Serve frontend WASM files
-    server.set_mount_point("/", "../../frontend/dist");
+    // Serve frontend static files
+    server.set_mount_point("/", "../../frontend-svelte/dist");
 
     // Start server
     std::cout << "Server starting on http://" << config.host << ":" << config.port << std::endl;

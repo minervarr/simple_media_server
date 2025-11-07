@@ -24,15 +24,15 @@ if ! command -v g++ &> /dev/null && ! command -v clang++ &> /dev/null; then
     exit 1
 fi
 
-# Check Rust
-if ! command -v cargo &> /dev/null; then
-    echo "Error: Rust not found. Install from https://rustup.rs"
+# Check Node.js
+if ! command -v node &> /dev/null; then
+    echo "Error: Node.js not found. Install from https://nodejs.org"
     exit 1
 fi
 
-# Check Trunk
-if ! command -v trunk &> /dev/null; then
-    echo "Error: Trunk not found. Install with: cargo install trunk"
+# Check npm
+if ! command -v npm &> /dev/null; then
+    echo "Error: npm not found. Install Node.js which includes npm"
     exit 1
 fi
 
@@ -41,10 +41,11 @@ echo ""
 
 # Build frontend
 echo "========================================="
-echo "Building Frontend (Rust + WASM)"
+echo "Building Frontend (Svelte + TypeScript)"
 echo "========================================="
-cd frontend
-./build.sh
+cd frontend-svelte
+npm install
+npm run build
 cd ..
 echo ""
 
