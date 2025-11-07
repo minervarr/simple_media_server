@@ -1,53 +1,44 @@
 <script lang="ts">
-  import { videoPlayer, copiedVideo } from '$lib/stores/videoPlayerStore';
   import { watchedVideos } from '$lib/stores/profileStore';
-  import { copyToClipboard, shareContent } from '$lib/utils/clipboard';
-  import Button from './Button.svelte';
   import type { Movie as MovieType } from '$lib/types';
 
   export let movie: MovieType;
 
   $: isWatched = $watchedVideos.has(movie.path);
-  $: isCopied = $copiedVideo === movie.path;
-
-  function handlePlay() {
-    videoPlayer.play(movie.path, movie.name);
-    watchedVideos.markAsWatched(movie.path);
-  }
-
-  async function handleCopy() {
-    const url = `/video/${movie.path}`;
-    const success = await copyToClipboard(url);
-    if (success) {
-      copiedVideo.set(movie.path);
-      setTimeout(() => copiedVideo.set(null), 2000);
-    }
-  }
-
-  async function handleShare() {
-    const url = `/video/${movie.path}`;
-    await shareContent(url, movie.name);
-  }
+  $: videoUrl = `/video/${movie.path}`;
 
   function handleToggleWatched(event: MouseEvent) {
+    event.preventDefault();
     event.stopPropagation();
     watchedVideos.toggle(movie.path);
+  }
+
+  function handleLinkClick() {
+    // Mark as watched when link is clicked
+    watchedVideos.markAsWatched(movie.path);
   }
 </script>
 
 <div class="movie" class:watched={isWatched}>
-  <div class="movie-name">{movie.name}</div>
+  <a
+    href={videoUrl}
+    class="movie-link"
+    on:click={handleLinkClick}
+    target="_blank"
+    rel="noopener noreferrer"
+  >
+    <div class="movie-name">{movie.name}</div>
+  </a>
   <div class="movie-actions">
-    <Button variant="primary" title="Play" on:click={handlePlay}>▶</Button>
-    <button
-      class="action-button copy-button"
-      class:copied={isCopied}
-      on:click={handleCopy}
-      title={isCopied ? 'Link copied!' : 'Copy link'}
+    <a
+      href={videoUrl}
+      class="play-link"
+      on:click={handleLinkClick}
+      target="_blank"
+      rel="noopener noreferrer"
     >
-      {isCopied ? '✓' : '🔗'}
-    </button>
-    <Button title="Share" on:click={handleShare}>📤</Button>
+      Play
+    </a>
     <div
       class="watched-indicator"
       class:watched={isWatched}
@@ -90,39 +81,46 @@
     }
   }
 
-  .movie-name {
-    font-size: var(--font-size-base);
-    line-height: 1.4;
+  .movie-link {
+    text-decoration: none;
+    color: inherit;
+    display: block;
     margin-bottom: var(--spacing-md);
+    transition: color var(--transition-fast);
+
+    &:hover {
+      color: var(--color-accent-success);
+    }
+  }
+
+  .movie-name {
+    font-size: var(--font-size-md);
+    line-height: 1.4;
+    color: var(--color-text-primary);
+    word-wrap: break-word;
+    transition: color var(--transition-fast);
   }
 
   .movie-actions {
     display: flex;
     justify-content: center;
-    gap: var(--spacing-sm);
+    align-items: center;
+    gap: var(--spacing-lg);
     margin-top: auto;
-
-    :global(.button) {
-      font-size: 1.5rem;
-    }
   }
 
-  .action-button {
-    background: none;
-    border: none;
-    font-size: 1.5rem;
-    cursor: pointer;
-    padding: var(--spacing-xs) var(--spacing-sm);
-    color: var(--color-text-disabled);
-    transition: all var(--transition-fast);
-    user-select: none;
-    min-width: 2rem;
-    text-align: center;
+  .play-link {
+    font-size: var(--font-size-base);
+    color: var(--color-accent-success);
+    text-decoration: none;
+    padding: var(--spacing-sm) var(--spacing-xl);
     border-radius: var(--radius-sm);
+    transition: all var(--transition-fast);
+    font-weight: var(--font-weight-medium);
 
     &:hover {
-      background-color: var(--color-bg-hover);
-      color: var(--color-text-primary);
+      background-color: var(--color-accent-success-bg);
+      color: var(--color-accent-success-bright);
     }
 
     &:active {
@@ -130,20 +128,18 @@
     }
   }
 
-  .copy-button.copied {
-    color: var(--color-accent-success);
-    background-color: var(--color-accent-success-bg);
-  }
-
   .watched-indicator {
     font-size: 1.5rem;
     cursor: pointer;
-    padding: var(--spacing-xs) var(--spacing-sm);
+    padding: var(--spacing-sm);
     color: var(--color-text-disabled);
     transition: color var(--transition-fast);
     user-select: none;
-    min-width: 2rem;
-    text-align: center;
+    min-width: 2.5rem;
+    min-height: 2.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     border-radius: var(--radius-sm);
 
     &:hover {
@@ -157,6 +153,28 @@
       &:hover {
         color: var(--color-text-disabled);
       }
+    }
+  }
+
+  // Mobile optimizations
+  @media (max-width: 768px) {
+    .movie {
+      padding: var(--spacing-lg);
+    }
+
+    .movie-name {
+      font-size: var(--font-size-base);
+    }
+
+    .play-link {
+      padding: var(--spacing-sm) var(--spacing-lg);
+      font-size: var(--font-size-sm);
+    }
+
+    .watched-indicator {
+      min-width: 3rem;
+      min-height: 3rem;
+      font-size: 1.7rem;
     }
   }
 </style>

@@ -1,37 +1,21 @@
 <script lang="ts">
-  import { videoPlayer, copiedVideo } from '$lib/stores/videoPlayerStore';
   import { watchedVideos } from '$lib/stores/profileStore';
-  import { copyToClipboard, shareContent } from '$lib/utils/clipboard';
-  import Button from './Button.svelte';
   import type { Video } from '$lib/types';
 
   export let episode: Video;
 
   $: isWatched = $watchedVideos.has(episode.path);
-  $: isCopied = $copiedVideo === episode.path;
-
-  function handlePlay() {
-    videoPlayer.play(episode.path, episode.filename);
-    watchedVideos.markAsWatched(episode.path);
-  }
-
-  async function handleCopy() {
-    const url = `/video/${episode.path}`;
-    const success = await copyToClipboard(url);
-    if (success) {
-      copiedVideo.set(episode.path);
-      setTimeout(() => copiedVideo.set(null), 2000);
-    }
-  }
-
-  async function handleShare() {
-    const url = `/video/${episode.path}`;
-    await shareContent(url, episode.filename);
-  }
+  $: videoUrl = `/video/${episode.path}`;
 
   function handleToggleWatched(event: MouseEvent) {
+    event.preventDefault();
     event.stopPropagation();
     watchedVideos.toggle(episode.path);
+  }
+
+  function handleLinkClick(event: MouseEvent) {
+    // Mark as watched when link is clicked
+    watchedVideos.markAsWatched(episode.path);
   }
 </script>
 
@@ -40,19 +24,26 @@
     {#if episode.episode}
       <span class="episode-number">E{episode.episode.toString().padStart(2, '0')}</span>
     {/if}
-    <span class="episode-name">{episode.filename}</span>
+    <a
+      href={videoUrl}
+      class="episode-link"
+      on:click={handleLinkClick}
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      {episode.filename}
+    </a>
   </div>
   <div class="episode-actions">
-    <Button variant="primary" title="Play" on:click={handlePlay}>▶</Button>
-    <button
-      class="action-button copy-button"
-      class:copied={isCopied}
-      on:click={handleCopy}
-      title={isCopied ? 'Link copied!' : 'Copy link'}
+    <a
+      href={videoUrl}
+      class="play-link"
+      on:click={handleLinkClick}
+      target="_blank"
+      rel="noopener noreferrer"
     >
-      {isCopied ? '✓' : '🔗'}
-    </button>
-    <Button title="Share" on:click={handleShare}>📤</Button>
+      Play
+    </a>
     <div
       class="watched-indicator"
       class:watched={isWatched}
@@ -71,7 +62,7 @@
   .episode {
     display: flex;
     align-items: center;
-    padding: 0.7rem 1rem 0.7rem 3rem;
+    padding: 0.9rem 1rem 0.9rem 2.5rem;
     color: var(--color-text-tertiary);
     transition: background-color var(--transition-fast);
     border-left: 3px solid transparent;
@@ -85,7 +76,7 @@
     &.watched {
       opacity: 0.6;
 
-      .episode-name {
+      .episode-link {
         text-decoration: line-through;
         text-decoration-color: var(--color-text-subtle);
       }
@@ -97,6 +88,7 @@
     align-items: center;
     gap: var(--spacing-md);
     flex: 1;
+    min-width: 0; // Allow text truncation
   }
 
   .episode-number {
@@ -104,35 +96,50 @@
     color: var(--color-text-muted);
     font-weight: var(--font-weight-semibold);
     min-width: 2.5rem;
+    flex-shrink: 0;
   }
 
-  .episode-name {
+  .episode-link {
     flex: 1;
-    font-size: var(--font-size-sm);
+    font-size: var(--font-size-base);
+    color: var(--color-text-primary);
+    text-decoration: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: var(--spacing-xs) 0;
+    transition: color var(--transition-fast);
+
+    &:hover {
+      color: var(--color-accent-success);
+      text-decoration: underline;
+    }
+
+    &:active {
+      color: var(--color-accent-success-bright);
+    }
   }
 
   .episode-actions {
     display: flex;
     align-items: center;
-    gap: var(--spacing-sm);
+    gap: var(--spacing-lg);
+    flex-shrink: 0;
   }
 
-  .action-button {
-    background: none;
-    border: none;
-    font-size: 1.2rem;
-    cursor: pointer;
-    padding: var(--spacing-xs) var(--spacing-sm);
-    color: var(--color-text-disabled);
-    transition: all var(--transition-fast);
-    user-select: none;
-    min-width: 2rem;
-    text-align: center;
+  .play-link {
+    font-size: var(--font-size-base);
+    color: var(--color-accent-success);
+    text-decoration: none;
+    padding: var(--spacing-sm) var(--spacing-lg);
     border-radius: var(--radius-sm);
+    transition: all var(--transition-fast);
+    font-weight: var(--font-weight-medium);
+    white-space: nowrap;
 
     &:hover {
-      background-color: var(--color-bg-hover);
-      color: var(--color-text-primary);
+      background-color: var(--color-accent-success-bg);
+      color: var(--color-accent-success-bright);
     }
 
     &:active {
@@ -140,20 +147,18 @@
     }
   }
 
-  .copy-button.copied {
-    color: var(--color-accent-success);
-    background-color: var(--color-accent-success-bg);
-  }
-
   .watched-indicator {
-    font-size: 1.2rem;
+    font-size: 1.3rem;
     cursor: pointer;
-    padding: var(--spacing-xs) var(--spacing-sm);
+    padding: var(--spacing-sm);
     color: var(--color-text-disabled);
     transition: color var(--transition-fast);
     user-select: none;
-    min-width: 2rem;
-    text-align: center;
+    min-width: 2.5rem;
+    min-height: 2.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     border-radius: var(--radius-sm);
 
     &:hover {
@@ -167,6 +172,34 @@
       &:hover {
         color: var(--color-text-disabled);
       }
+    }
+  }
+
+  // Mobile optimizations
+  @media (max-width: 768px) {
+    .episode {
+      padding: 1rem 0.75rem 1rem 1.5rem;
+      flex-wrap: wrap;
+      gap: var(--spacing-sm);
+    }
+
+    .episode-info {
+      width: 100%;
+    }
+
+    .episode-link {
+      font-size: var(--font-size-base);
+    }
+
+    .play-link {
+      padding: var(--spacing-sm) var(--spacing-md);
+      font-size: var(--font-size-sm);
+    }
+
+    .watched-indicator {
+      min-width: 3rem;
+      min-height: 3rem;
+      font-size: 1.5rem;
     }
   }
 </style>
