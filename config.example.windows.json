@@ -1,6 +1,5 @@
 {
-  "library_path": "/path/to/your/videos",
-  "comment": "Windows users: Use forward slashes like 'C:/Users/YourName/Videos' or double backslashes like 'C:\\\\Users\\\\YourName\\\\Videos'",
+  "library_path": "C:/Users/YourName/Videos",
   "host": "0.0.0.0",
   "port": 8080,
   "profiles": [
