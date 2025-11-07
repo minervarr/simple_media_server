@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount, onDestroy, tick } from 'svelte';
   import { videoPlayer } from '$lib/stores/videoPlayerStore';
   import { initializeHLSPlayer, destroyHLSPlayer } from '$lib/utils/videoPlayer';
   import { fetchVideoInfo, getVideoUrl } from '$lib/api/videoInfo';
@@ -21,69 +21,81 @@
   let showFormatSelector = false;
   let loading = true;
   let loadingMessage = 'Loading video information...';
+  let initialized = false;
 
   // Device capabilities
   const deviceCapabilities = detectDeviceCapabilities();
 
-  onMount(async () => {
-    if (player && videoElement) {
-      try {
-        console.log('[VideoPlayer] Starting video player for:', player.path);
+  // Initialize video player when element is ready
+  $: if (player && videoElement && !initialized) {
+    console.log('[VideoPlayer] Element and player ready, initializing...');
+    initializePlayer();
+  }
 
-        // Load format preference
-        const preference = loadFormatPreference();
-        console.log('[VideoPlayer] Loaded preference:', preference);
-
-        // Fetch video information
-        console.log('[VideoPlayer] Fetching video info from API...');
-        videoInfo = await fetchVideoInfo(player.path);
-
-        if (videoInfo) {
-          console.log('[VideoPlayer] Video info received:', {
-            codec: videoInfo.video_streams[0]?.codec_name,
-            resolution: `${videoInfo.video_streams[0]?.width}x${videoInfo.video_streams[0]?.height}`,
-            modes: videoInfo.playback_modes.map(m => m.id)
-          });
-
-          // Auto-select format based on preference and device capabilities
-          if (preference.autoSelect && videoInfo.video_streams.length > 0) {
-            const videoCodec = videoInfo.video_streams[0].codec_name;
-            selectedMode = getRecommendedMode(deviceCapabilities, videoCodec);
-            console.log('[VideoPlayer] Auto-selected mode:', selectedMode);
-          } else {
-            selectedMode = preference.preferredMode;
-            console.log('[VideoPlayer] Using preferred mode:', selectedMode);
-          }
-
-          // Ensure selected mode is available
-          const availableModes = videoInfo.playback_modes.map((m) => m.id);
-          if (!availableModes.includes(selectedMode)) {
-            console.warn('[VideoPlayer] Selected mode not available, falling back to HLS');
-            selectedMode = 'hls'; // Fallback to HLS
-          }
-        } else {
-          console.error('[VideoPlayer] Failed to fetch video info, using default HLS mode');
-          selectedMode = 'hls'; // Fallback to HLS if video info fails
-        }
-
-        // Initialize video player
-        console.log('[VideoPlayer] Loading video with mode:', selectedMode);
-        await loadVideo(selectedMode);
-        console.log('[VideoPlayer] Video loaded successfully');
-        loading = false;
-      } catch (error) {
-        console.error('[VideoPlayer] Error during initialization:', error);
-        // Still try to play with HLS as fallback
-        selectedMode = 'hls';
-        try {
-          await loadVideo(selectedMode);
-        } catch (fallbackError) {
-          console.error('[VideoPlayer] Fallback also failed:', fallbackError);
-        }
-        loading = false;
-      }
+  async function initializePlayer() {
+    if (initialized || !player || !videoElement) {
+      console.log('[VideoPlayer] Skipping init - already initialized or missing deps');
+      return;
     }
-  });
+
+    initialized = true;
+
+    try {
+      console.log('[VideoPlayer] Starting video player for:', player.path);
+
+      // Load format preference
+      const preference = loadFormatPreference();
+      console.log('[VideoPlayer] Loaded preference:', preference);
+
+      // Fetch video information
+      console.log('[VideoPlayer] Fetching video info from API...');
+      videoInfo = await fetchVideoInfo(player.path);
+
+      if (videoInfo) {
+        console.log('[VideoPlayer] Video info received:', {
+          codec: videoInfo.video_streams[0]?.codec_name,
+          resolution: `${videoInfo.video_streams[0]?.width}x${videoInfo.video_streams[0]?.height}`,
+          modes: videoInfo.playback_modes.map(m => m.id)
+        });
+
+        // Auto-select format based on preference and device capabilities
+        if (preference.autoSelect && videoInfo.video_streams.length > 0) {
+          const videoCodec = videoInfo.video_streams[0].codec_name;
+          selectedMode = getRecommendedMode(deviceCapabilities, videoCodec);
+          console.log('[VideoPlayer] Auto-selected mode:', selectedMode);
+        } else {
+          selectedMode = preference.preferredMode;
+          console.log('[VideoPlayer] Using preferred mode:', selectedMode);
+        }
+
+        // Ensure selected mode is available
+        const availableModes = videoInfo.playback_modes.map((m) => m.id);
+        if (!availableModes.includes(selectedMode)) {
+          console.warn('[VideoPlayer] Selected mode not available, falling back to HLS');
+          selectedMode = 'hls'; // Fallback to HLS
+        }
+      } else {
+        console.error('[VideoPlayer] Failed to fetch video info, using default HLS mode');
+        selectedMode = 'hls'; // Fallback to HLS if video info fails
+      }
+
+      // Initialize video player
+      console.log('[VideoPlayer] Loading video with mode:', selectedMode);
+      await loadVideo(selectedMode);
+      console.log('[VideoPlayer] Video loaded successfully');
+      loading = false;
+    } catch (error) {
+      console.error('[VideoPlayer] Error during initialization:', error);
+      // Still try to play with HLS as fallback
+      selectedMode = 'hls';
+      try {
+        await loadVideo(selectedMode);
+      } catch (fallbackError) {
+        console.error('[VideoPlayer] Fallback also failed:', fallbackError);
+      }
+      loading = false;
+    }
+  }
 
   onDestroy(() => {
     if (hlsInstance) {
