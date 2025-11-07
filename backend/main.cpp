@@ -418,7 +418,30 @@ int main(int argc, char** argv) {
     });
 
     // Serve frontend static files
-    server.set_mount_point("/", "../../frontend-svelte/dist");
+    // Try multiple paths to handle different build configurations
+    std::vector<std::string> possiblePaths = {
+        "../../../frontend-svelte/dist",  // Windows Visual Studio (backend/build/Release/)
+        "../../frontend-svelte/dist",     // Linux/Mac (backend/build/)
+        "../frontend-svelte/dist",        // Alternative
+        "frontend-svelte/dist"            // Running from project root
+    };
+
+    std::string frontendPath;
+    for (const auto& path : possiblePaths) {
+        if (fs::exists(path) && fs::exists(fs::path(path) / "index.html")) {
+            frontendPath = path;
+            std::cout << "Found frontend at: " << fs::absolute(path) << std::endl;
+            break;
+        }
+    }
+
+    if (frontendPath.empty()) {
+        std::cerr << "Warning: Frontend dist folder not found!" << std::endl;
+        std::cerr << "Please run: cd frontend-svelte && npm run build" << std::endl;
+        std::cerr << "Or run: build.bat (Windows) / ./build.sh (Linux/Mac)" << std::endl;
+    } else {
+        server.set_mount_point("/", frontendPath);
+    }
 
     // Start server
     std::cout << "Server starting on http://" << config.host << ":" << config.port << std::endl;
