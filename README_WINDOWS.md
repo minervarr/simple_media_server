@@ -28,9 +28,16 @@ This will:
 
 ### **2. Configure**
 Edit `config.json`:
+
+**IMPORTANT: Windows paths in JSON**
+- Use forward slashes: `C:/Users/YourName/Videos` (recommended)
+- OR double backslashes: `C:\\Users\\YourName\\Videos`
+- Single backslashes DON'T work: `C:\Users\...` ❌
+
 ```json
 {
-  "libraryPath": "C:\\Users\\YourName\\Videos",
+  "library_path": "C:/Users/YourName/Videos",
+  "host": "0.0.0.0",
   "port": 8080,
   "profiles": [
     {"id": "user1", "name": "John", "icon": "👤"}
