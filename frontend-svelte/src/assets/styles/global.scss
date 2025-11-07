@@ -1,0 +1,167 @@
+// Global SCSS - AMOLED Black Theme with Design Tokens
+
+// Design tokens (inspired by Apple's approach)
+:root {
+  // Colors - AMOLED Black Theme
+  --color-bg-primary: #000000;
+  --color-bg-secondary: #0a0a0a;
+  --color-bg-tertiary: #151515;
+  --color-bg-hover: #1a1a1a;
+  --color-bg-active: #0f0f0f;
+
+  // Border colors
+  --color-border-primary: #1a1a1a;
+  --color-border-secondary: #2a2a2a;
+  --color-border-tertiary: #3a3a3a;
+
+  // Text colors
+  --color-text-primary: #ffffff;
+  --color-text-secondary: #dddddd;
+  --color-text-tertiary: #cccccc;
+  --color-text-muted: #888888;
+  --color-text-disabled: #666666;
+  --color-text-subtle: #555555;
+
+  // Accent colors
+  --color-accent-success: #00aa00;
+  --color-accent-success-bright: #00ff00;
+  --color-accent-success-bg: #0a2a0a;
+  --color-accent-error: #ff4444;
+
+  // Spacing
+  --spacing-xs: 0.25rem;
+  --spacing-sm: 0.5rem;
+  --spacing-md: 0.75rem;
+  --spacing-lg: 1rem;
+  --spacing-xl: 1.5rem;
+  --spacing-2xl: 2rem;
+  --spacing-3xl: 3rem;
+
+  // Border radius
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  // Font sizes
+  --font-size-xs: 0.85rem;
+  --font-size-sm: 0.9rem;
+  --font-size-base: 1rem;
+  --font-size-md: 1.1rem;
+  --font-size-lg: 1.2rem;
+  --font-size-xl: 1.3rem;
+  --font-size-2xl: 1.5rem;
+  --font-size-3xl: 2rem;
+  --font-size-4xl: 3rem;
+
+  // Font weights
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+
+  // Transitions
+  --transition-fast: 0.2s;
+  --transition-medium: 0.3s;
+
+  // Z-index layers
+  --z-base: 1;
+  --z-sticky: 100;
+  --z-modal: 1000;
+  --z-overlay: 2000;
+}
+
+// Reset and base styles
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body,
+html {
+  width: 100%;
+  height: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', sans-serif;
+  background-color: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+// Typography mixins
+@mixin text-primary {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-normal);
+}
+
+@mixin text-secondary {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-normal);
+}
+
+@mixin text-muted {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+// Button mixins
+@mixin button-base {
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  user-select: none;
+  outline: none;
+
+  &:active {
+    transform: scale(0.95);
+  }
+}
+
+@mixin button-primary {
+  @include button-base;
+  background-color: var(--color-bg-hover);
+  color: var(--color-text-primary);
+  border-radius: var(--radius-sm);
+
+  &:hover {
+    background-color: var(--color-bg-tertiary);
+  }
+}
+
+// Card/Surface mixins
+@mixin card {
+  background-color: var(--color-bg-secondary);
+  border: 1px solid var(--color-border-primary);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+@mixin card-hover {
+  transition: all var(--transition-fast);
+
+  &:hover {
+    background-color: var(--color-bg-tertiary);
+    border-color: var(--color-border-secondary);
+    transform: translateY(-2px);
+  }
+
+  &:active {
+    transform: translateY(0);
+  }
+}
+
+// Utility classes
+.text-muted {
+  color: var(--color-text-muted);
+}
+
+.text-success {
+  color: var(--color-accent-success);
+}
+
+.text-error {
+  color: var(--color-accent-error);
+}
