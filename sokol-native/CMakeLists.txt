@@ -1,53 +1,56 @@
 cmake_minimum_required(VERSION 3.14)
-project(sokol_media_player C)
+project(vulkan_media_player C)
 
 set(CMAKE_C_STANDARD 11)
 
-# Platform detection
+# Find Vulkan
+find_package(Vulkan REQUIRED)
+
+# Platform-specific libraries (excluding graphics backends, using Vulkan only)
 if(WIN32)
-    set(SOKOL_BACKEND "SOKOL_D3D11")
-    set(LIBS d3d11 dxgi)
+    # Windows: Vulkan + audio + system
+    set(PLATFORM_LIBS ${Vulkan_LIBRARIES})
 elseif(APPLE)
-    set(SOKOL_BACKEND "SOKOL_METAL")
-    set(LIBS "-framework Cocoa" "-framework QuartzCore" "-framework Metal" "-framework MetalKit" "-framework AudioToolbox")
+    # macOS: Vulkan (MoltenVK) + frameworks
+    set(PLATFORM_LIBS ${Vulkan_LIBRARIES} "-framework Cocoa" "-framework QuartzCore" "-framework AudioToolbox")
 elseif(ANDROID)
-    set(SOKOL_BACKEND "SOKOL_GLES3")
-    set(LIBS GLESv3 EGL android log)
+    # Android: Vulkan + system
+    set(PLATFORM_LIBS ${Vulkan_LIBRARIES} android log)
 else() # Linux
-    set(SOKOL_BACKEND "SOKOL_GLCORE33")
+    # Linux: Vulkan + X11 + audio + threading
+    # Note: GL is needed by sokol_app.h for context creation (even though we use Vulkan for rendering)
     find_package(X11 REQUIRED)
     find_package(Threads REQUIRED)
-    set(LIBS X11 Xi Xcursor GL asound dl m pthread)
+    set(PLATFORM_LIBS ${Vulkan_LIBRARIES} X11 Xi Xcursor GL asound dl m pthread)
 endif()
 
 # Include directories
 include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/external/sokol
+    ${Vulkan_INCLUDE_DIRS}
 )
 
 # Source files
 set(SOURCES
-    src/main.c
+    src/vulkan_main.c
 )
 
 # Executable
-add_executable(sokol_media_player ${SOURCES})
+add_executable(vulkan_media_player ${SOURCES})
 
 # Platform-specific compiler flags
 if(MSVC)
-    target_compile_options(sokol_media_player PRIVATE /W3)
+    target_compile_options(vulkan_media_player PRIVATE /W3)
 else()
-    target_compile_options(sokol_media_player PRIVATE -Wall -Wextra)
+    target_compile_options(vulkan_media_player PRIVATE -Wall -Wextra)
 endif()
 
 # Link libraries
-target_link_libraries(sokol_media_player ${LIBS})
+target_link_libraries(vulkan_media_player ${PLATFORM_LIBS})
 
 # Install target
-install(TARGETS sokol_media_player DESTINATION bin)
+install(TARGETS vulkan_media_player DESTINATION bin)
 
-# Copy resources if any
-# install(DIRECTORY assets/ DESTINATION bin/assets)
-
-message(STATUS "Sokol Backend: ${SOKOL_BACKEND}")
-message(STATUS "Platform Libraries: ${LIBS}")
+message(STATUS "Vulkan Include: ${Vulkan_INCLUDE_DIRS}")
+message(STATUS "Vulkan Libraries: ${Vulkan_LIBRARIES}")
+message(STATUS "Platform Libraries: ${PLATFORM_LIBS}")
