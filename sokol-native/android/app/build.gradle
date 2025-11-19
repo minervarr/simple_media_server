@@ -1,0 +1,62 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.sokolmediaplayer.app'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.sokolmediaplayer.app"
+        minSdk 24  // Android 7.0 (required for Vulkan, but we use GLES3)
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+
+        ndk {
+            abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86_64'
+        }
+
+        externalNativeBuild {
+            cmake {
+                cppFlags '-std=c11'
+                arguments '-DANDROID_STL=c++_shared',
+                          '-DANDROID_PLATFORM=android-24'
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path file('../../CMakeLists.txt')
+            version '3.22.1'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    buildFeatures {
+        viewBinding true
+    }
+
+    packagingOptions {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'com.google.android.material:material:1.10.0'
+}
