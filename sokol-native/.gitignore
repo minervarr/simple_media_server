@@ -1,0 +1,29 @@
+# Build directories
+build/
+build-*/
+*.exe
+*.out
+*.o
+*.obj
+
+# Android
+android/.gradle/
+android/.cxx/
+android/local.properties
+android/app/build/
+*.apk
+*.aab
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db

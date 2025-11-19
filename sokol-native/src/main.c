@@ -17,6 +17,7 @@
 #include "../external/sokol/sokol_log.h"
 #include "../external/sokol/sokol_app.h"
 #include "../external/sokol/sokol_gfx.h"
+#include "../external/sokol/sokol_glue.h"
 #include "../external/sokol/sokol_time.h"
 #include "../external/sokol/sokol_audio.h"
 
@@ -54,6 +55,8 @@ static app_state_t state = {0};
 // ============================================
 // LOGGING HELPERS
 // ============================================
+#undef LOG_INFO
+#undef LOG_DEBUG
 #define LOG_INFO(fmt, ...) printf("[INFO] " fmt "\n", ##__VA_ARGS__)
 #define LOG_DEBUG(fmt, ...) printf("[DEBUG] " fmt "\n", ##__VA_ARGS__)
 #define LOG_ERROR(fmt, ...) do { printf("[ERROR] " fmt "\n", ##__VA_ARGS__); state.error_count++; } while(0)
@@ -168,7 +171,7 @@ static void init(void) {
     // ========================================
     LOG_INFO("Step 1/5: Initializing Sokol GFX...");
     sg_setup(&(sg_desc){
-        .context = sapp_sgcontext(),
+        .environment = sglue_environment(),
         .logger.func = slog_func,
     });
 
@@ -248,12 +251,14 @@ static void init(void) {
     // Create shader
     LOG_DEBUG("Creating shader...");
     sg_shader shd = sg_make_shader(&(sg_shader_desc){
-        .vs.source = vs_source_gl33,
-        .fs.source = fs_source_gl33,
-        .vs.uniform_blocks[0] = {
+        .vertex_func.source = vs_source_gl33,
+        .fragment_func.source = fs_source_gl33,
+        .uniform_blocks[0] = {
+            .stage = SG_SHADERSTAGE_VERTEX,
             .size = 64,
-            .uniforms = {
-                [0] = { .name = "mvp", .type = SG_UNIFORMTYPE_MAT4 }
+            .layout = SG_UNIFORMLAYOUT_NATIVE,
+            .glsl_uniforms = {
+                [0] = { .type = SG_UNIFORMTYPE_MAT4, .array_count = 1, .glsl_name = "mvp" }
             }
         },
         .label = "triangle-shader"
@@ -394,10 +399,13 @@ static void frame(void) {
         LOG_INFO("  - Viewport: %dx%d", width, height);
     }
 
-    sg_begin_default_pass(&state.pass_action, width, height);
+    sg_begin_pass(&(sg_pass){
+        .action = state.pass_action,
+        .swapchain = sglue_swapchain()
+    });
     sg_apply_pipeline(state.pip);
     sg_apply_bindings(&state.bind);
-    sg_apply_uniforms(SG_SHADERSTAGE_VS, 0, &SG_RANGE(mvp));
+    sg_apply_uniforms(0, &SG_RANGE(mvp));
     sg_draw(0, 3, 1);
     sg_end_pass();
     sg_commit();
